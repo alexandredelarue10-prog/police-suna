@@ -18,11 +18,17 @@ lourd) pour rester très léger en consommation de données et en ressources ser
 - **Casiers judiciaires** : fiche par individu, historique d'infractions rattachées au code
   pénal (amende, cellule/T.I.G, récidive).
 - **Organigramme public** et **communiqués officiels** sur la page d'accueil.
-- **Compte principal** créé automatiquement au premier démarrage :
-  - Identifiant : `lexioui`
+- **Compte principal protégé** créé automatiquement au premier démarrage :
+  - Identifiant : `DEV`
   - Mot de passe : `roidudev`
   - Grade : Dirigeant (tous les droits)
-  - **Change ce mot de passe dès le premier déploiement** (page "Mon profil" une fois connecté).
+  - **Change ce mot de passe dès le premier déploiement** (page "Mon profil" une fois connecté —
+    c'est la seule chose que ce compte peut modifier sur lui-même).
+  - Ce compte est **protégé** : personne (pas même lui-même) ne peut changer son grade, son rang,
+    ou le supprimer depuis l'interface.
+- **Anti auto-promotion** : aucun utilisateur, quel que soit son grade, ne peut modifier son
+  propre grade ou son propre rang ninja depuis l'interface. Seul un autre haut gradé habilité
+  peut le faire.
 
 ## Structure du projet
 

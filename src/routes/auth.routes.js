@@ -43,6 +43,7 @@ async function buildSessionUser(userRow) {
     matricule: userRow.matricule,
     rang_ninja: userRow.rang_ninja,
     brigade: userRow.brigade,
+    protege: userRow.protege,
     grade_id: userRow.grade_id,
     grade_nom: gradeNom,
     grade_couleur: gradeCouleur,

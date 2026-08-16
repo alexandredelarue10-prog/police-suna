@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.rang_ninja, u.brigade,
+      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.rang_ninja, u.brigade, u.protege,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau
        FROM users u
        LEFT JOIN grades g ON g.id = u.grade_id
@@ -68,12 +68,24 @@ router.post('/:id/reject', requireAuth, requirePermission('peut_valider_comptes'
 // PATCH /api/users/:id/grade — change le grade (poste) d'un membre déjà approuvé
 router.patch('/:id/grade', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
+    const targetId = Number(req.params.id);
+
+    // Personne ne peut modifier son propre grade — empêche toute auto-promotion, même pour un Dirigeant/Gérant.
+    if (targetId === req.session.user.id) {
+      return res.status(403).json({ error: 'Vous ne pouvez pas modifier votre propre grade.' });
+    }
+
+    const { rows: targetRows } = await pool.query('SELECT protege FROM users WHERE id = $1', [targetId]);
+    if (targetRows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    if (targetRows[0].protege) {
+      return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être modifié.' });
+    }
+
     const { grade_id } = req.body;
     const { rows } = await pool.query(
       `UPDATE users SET grade_id = $1 WHERE id = $2 RETURNING id, username`,
-      [grade_id || null, req.params.id]
+      [grade_id || null, targetId]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
     res.json({ message: `Grade de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/grade]', err);
@@ -84,12 +96,23 @@ router.patch('/:id/grade', requireAuth, requirePermission('peut_valider_comptes'
 // PATCH /api/users/:id/rang — change le rang ninja et/ou la brigade d'un membre (informatif)
 router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
+    const targetId = Number(req.params.id);
+
+    if (targetId === req.session.user.id) {
+      return res.status(403).json({ error: 'Vous ne pouvez pas modifier votre propre rang.' });
+    }
+
+    const { rows: targetRows } = await pool.query('SELECT protege FROM users WHERE id = $1', [targetId]);
+    if (targetRows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    if (targetRows[0].protege) {
+      return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être modifié.' });
+    }
+
     const { rang_ninja, brigade } = req.body;
     const { rows } = await pool.query(
       `UPDATE users SET rang_ninja = $1, brigade = $2 WHERE id = $3 RETURNING id, username`,
-      [rang_ninja || '', brigade || '', req.params.id]
+      [rang_ninja || '', brigade || '', targetId]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
     res.json({ message: `Rang de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/rang]', err);
@@ -100,11 +123,19 @@ router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes')
 // DELETE /api/users/:id — supprime un compte
 router.delete('/:id', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
-    if (Number(req.params.id) === req.session.user.id) {
+    const targetId = Number(req.params.id);
+
+    if (targetId === req.session.user.id) {
       return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte.' });
     }
-    const { rows } = await pool.query('DELETE FROM users WHERE id = $1 RETURNING username', [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+
+    const { rows: targetRows } = await pool.query('SELECT protege FROM users WHERE id = $1', [targetId]);
+    if (targetRows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    if (targetRows[0].protege) {
+      return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être supprimé.' });
+    }
+
+    const { rows } = await pool.query('DELETE FROM users WHERE id = $1 RETURNING username', [targetId]);
     res.json({ message: `Compte ${rows[0].username} supprimé.` });
   } catch (err) {
     console.error('[users/delete]', err);
@@ -112,7 +143,7 @@ router.delete('/:id', requireAuth, requirePermission('peut_valider_comptes'), as
   }
 });
 
-// PATCH /api/users/me/password — un utilisateur change son propre mot de passe
+// PATCH /api/users/me/password — un utilisateur change son propre mot de passe (autorisé même pour un compte protégé)
 router.patch('/me/password', requireAuth, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;

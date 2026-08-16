@@ -35,10 +35,12 @@
   <script src="js/common.js"></script>
   <script>
     let gradesCache = [];
+    let currentUserId = null;
 
     (async function () {
       const user = await initLayout({ activeKey: 'admin-comptes', requireAuth: true, requirePerm: 'peut_valider_comptes' });
       if (!user) return;
+      currentUserId = user.id;
       const { grades } = await api('/grades');
       gradesCache = grades;
       loadUsers();
@@ -136,32 +138,38 @@
       }
       tbody.innerHTML = approved.map(u => {
         const [label, cls] = statutLabels[u.statut] || ['—', 'badge-muted'];
+        const locked = u.protege || u.id === currentUserId;
+        const lockReason = u.protege ? 'Compte protégé' : 'Vous ne pouvez pas modifier votre propre grade/rang';
         return `
           <tr>
-            <td>${escapeHtml(u.username)}</td>
+            <td>${escapeHtml(u.username)}${u.protege ? ' <span class="badge badge-warn">Protégé</span>' : ''}</td>
             <td>${escapeHtml(u.nom_complet || '—')}</td>
-            <td>${gradeSelectHtml(u.grade_id)}</td>
-            <td>${rangSelectHtml(u.rang_ninja || '')}</td>
+            <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.grade_nom || '—')} 🔒</span>` : gradeSelectHtml(u.grade_id)}</td>
+            <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.rang_ninja || '—')} 🔒</span>` : rangSelectHtml(u.rang_ninja || '')}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
-            <td><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></td>
+            <td>${u.protege ? '' : `<button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button>`}</td>
           </tr>`;
       }).join('');
 
-      tbody.querySelectorAll('.grade-select').forEach((select, idx) => {
+      tbody.querySelectorAll('.grade-select').forEach((select) => {
+        const row = select.closest('tr');
+        const idx = [...tbody.children].indexOf(row);
         select.addEventListener('change', async () => {
           try {
             await api(`/users/${approved[idx].id}/grade`, { method: 'PATCH', body: { grade_id: select.value || null } });
             toast('Grade mis à jour.');
-          } catch (err) { toast(err.message, 'error'); }
+          } catch (err) { toast(err.message, 'error'); loadUsers(); }
         });
       });
-      tbody.querySelectorAll('.rang-select').forEach((select, idx) => {
+      tbody.querySelectorAll('.rang-select').forEach((select) => {
+        const row = select.closest('tr');
+        const idx = [...tbody.children].indexOf(row);
         select.addEventListener('change', async () => {
           try {
             await api(`/users/${approved[idx].id}/rang`, { method: 'PATCH', body: { rang_ninja: select.value || '' } });
             toast('Rang ninja mis à jour.');
-          } catch (err) { toast(err.message, 'error'); }
+          } catch (err) { toast(err.message, 'error'); loadUsers(); }
         });
       });
       tbody.querySelectorAll('[data-delete]').forEach(btn => {

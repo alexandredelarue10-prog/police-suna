@@ -30,10 +30,13 @@ CREATE TABLE IF NOT EXISTS users (
   brigade VARCHAR(80) DEFAULT '', -- ex: "Brigade de déminage"
   statut VARCHAR(20) NOT NULL DEFAULT 'en_attente', -- en_attente | approuve | refuse
   matricule VARCHAR(20) UNIQUE,
+  protege BOOLEAN NOT NULL DEFAULT FALSE, -- compte protégé (ex: DEV) : grade/rang/suppression verrouillés
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   valide_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
   valide_le TIMESTAMPTZ
 );
+-- Migration idempotente : ajoute la colonne si la table existait déjà sans elle
+ALTER TABLE users ADD COLUMN IF NOT EXISTS protege BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- TYPES DE SANCTIONS (code pénal) : entièrement modifiables (article, amende, cellule/TIG, gravité...)
 CREATE TABLE IF NOT EXISTS sanctions_types (

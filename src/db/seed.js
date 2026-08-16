@@ -176,18 +176,29 @@ async function run() {
     console.log('[seed] Codes d\'alerte créés (Bleu détaillé, les autres sont à compléter dans "Protocoles").');
   }
 
-  // --- Compte principal (créé uniquement s'il n'existe pas déjà) ---
-  const { rows: existing } = await pool.query('SELECT id FROM users WHERE username = $1', ['lexioui']);
+  // --- Compte principal protégé (créé uniquement s'il n'existe pas déjà) ---
+  // Migration en douceur : si un déploiement précédent avait déjà créé "lexioui", on le renomme en "DEV"
+  // et on le marque protégé, plutôt que de créer un doublon.
+  const { rows: legacyLexioui } = await pool.query("SELECT id FROM users WHERE username = 'lexioui'");
+  if (legacyLexioui.length > 0) {
+    await pool.query("UPDATE users SET username = 'DEV', protege = TRUE WHERE username = 'lexioui'");
+    console.log('[seed] Compte "lexioui" migré vers "DEV" (protégé).');
+  }
+
+  const { rows: existing } = await pool.query('SELECT id FROM users WHERE username = $1', ['DEV']);
   if (existing.length === 0) {
     const { rows: dirigeant } = await pool.query("SELECT id FROM grades WHERE nom = 'Dirigeant' LIMIT 1");
     const gradeId = dirigeant[0] ? dirigeant[0].id : null;
     const hash = await bcrypt.hash('roidudev', 12);
     await pool.query(
-      `INSERT INTO users (username, password_hash, nom_complet, grade_id, rang_ninja, statut, matricule, valide_le)
-       VALUES ($1,$2,$3,$4,$5,'approuve',$6, now())`,
-      ['lexioui', hash, 'Administrateur Principal', gradeId, 'Jônin', 'SUNA-0001']
+      `INSERT INTO users (username, password_hash, nom_complet, grade_id, rang_ninja, statut, matricule, valide_le, protege)
+       VALUES ($1,$2,$3,$4,$5,'approuve',$6, now(), TRUE)`,
+      ['DEV', hash, 'Administrateur Principal', gradeId, 'Jônin', 'SUNA-0001']
     );
-    console.log('[seed] Compte principal "lexioui" créé.');
+    console.log('[seed] Compte principal "DEV" créé (protégé).');
+  } else {
+    // S'assure que le compte DEV reste protégé même après une migration manuelle en base
+    await pool.query("UPDATE users SET protege = TRUE WHERE username = 'DEV' AND protege = FALSE");
   }
 
   console.log('[seed] Terminé.');
