@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Protocole officiel — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .alerte-item { border: 1px solid rgba(217,192,139,0.16); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
+    .alerte-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 16px 18px; cursor: pointer; background: rgba(0,0,0,0.15);
+    }
+    .alerte-head:hover { background: rgba(0,0,0,0.24); }
+    .alerte-name { font-family: var(--font-display); letter-spacing: 0.05em; font-size: 1.05rem; }
+    .alerte-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .alerte-body { padding: 0 18px 20px; display: none; }
+    .alerte-body.open { display: block; }
+    .alerte-arrow { transition: transform 0.15s ease; }
+    .alerte-arrow.open { transform: rotate(90deg); }
+    .protocol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 14px 0; }
+    .protocol-block h4 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--or-300); margin-bottom: 6px; }
+    .protocol-block p { font-size: 0.88rem; margin: 0 0 4px; }
+    .actions-list { margin: 8px 0 0; padding-left: 18px; font-size: 0.88rem; color: var(--sable-100); }
+  </style>
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Protocole officiel</h1>
+          <p class="muted">Code d'alerte : cinq niveaux de menace, du plus faible au plus critique.</p>
+        </div>
+        <button class="btn btn-primary hidden" id="new-alerte-btn">+ Nouveau code</button>
+      </div>
+
+      <div id="alertes-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="alerte-modal">
+    <div class="modal" style="max-width:640px">
+      <h3 id="modal-title">Nouveau code d'alerte</h3>
+      <form id="alerte-form">
+        <input type="hidden" id="a-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="a-nom">Nom *</label>
+            <input type="text" id="a-nom" placeholder="Ex : Bleu" required />
+          </div>
+          <div class="field">
+            <label for="a-couleur">Couleur</label>
+            <input type="color" id="a-couleur" value="#3E5C6B" style="height:42px; padding:4px" />
+          </div>
+          <div class="field">
+            <label for="a-ordre">Ordre</label>
+            <input type="number" id="a-ordre" value="0" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="a-desc">Description courte</label>
+          <input type="text" id="a-desc" placeholder="Ex : Vigilance renforcée — menace faible" />
+        </div>
+
+        <h4 style="margin:16px 0 8px; font-size:0.85rem; text-transform:uppercase; color:var(--encre-700)">Déclenchement</h4>
+        <div class="field"><label for="a-decl-situation">Situation</label><textarea id="a-decl-situation" rows="2"></textarea></div>
+        <div class="field"><label for="a-decl-infos">Informations requises</label><textarea id="a-decl-infos" rows="2"></textarea></div>
+        <div class="field"><label for="a-decl-autorisation">Autorisation nécessaire</label><input type="text" id="a-decl-autorisation" /></div>
+
+        <h4 style="margin:16px 0 8px; font-size:0.85rem; text-transform:uppercase; color:var(--encre-700)">Mobilisation</h4>
+        <div class="field"><label for="a-mob-alerte">Qui est alerté</label><textarea id="a-mob-alerte" rows="2"></textarea></div>
+        <div class="field"><label for="a-mob-effectif">Effectif mobilisé</label><textarea id="a-mob-effectif" rows="2"></textarea></div>
+        <div class="field"><label for="a-mob-zones">Zones concernées</label><textarea id="a-mob-zones" rows="2"></textarea></div>
+
+        <div class="field">
+          <label for="a-actions">Actions à mener (une par ligne)</label>
+          <textarea id="a-actions" rows="5"></textarea>
+        </div>
+
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user, alertesCache = [];
+
+    (async function () {
+      user = await initLayout({ activeKey: '' });
+      const canManage = !!(user && user.permissions.peut_gerer_protocoles);
+      if (canManage) document.getElementById('new-alerte-btn').classList.remove('hidden');
+      document.getElementById('new-alerte-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('alerte-modal').classList.remove('open'));
+      document.getElementById('alerte-form').addEventListener('submit', saveAlerte);
+      loadAlertes(canManage);
+    })();
+
+    async function loadAlertes(canManage) {
+      const container = document.getElementById('alertes-list');
+      try {
+        const { alertes } = await api('/alertes');
+        alertesCache = alertes;
+        if (alertes.length === 0) { container.innerHTML = '<div class="empty-state">Aucun code d\'alerte défini.</div>'; return; }
+
+        container.innerHTML = alertes.map((a, idx) => {
+          const hasDetail = a.declenchement_situation || a.mobilisation_alerte || a.actions;
+          return `
+          <div class="alerte-item">
+            <div class="alerte-head" data-toggle="${idx}">
+              <div class="flex gap-12" style="align-items:center">
+                <span class="alerte-dot" style="background:${a.couleur}"></span>
+                <span class="alerte-name" style="color:${a.couleur}">Code ${escapeHtml(a.nom)}</span>
+                <span class="muted" style="font-size:0.85rem">— ${escapeHtml(a.description_courte || '')}</span>
+              </div>
+              <div class="flex gap-8" style="align-items:center">
+                ${canManage ? `<button class="btn btn-secondary btn-sm" data-edit="${a.id}" onclick="event.stopPropagation()">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${a.id}" onclick="event.stopPropagation()">Suppr.</button>` : ''}
+                <span class="alerte-arrow" id="arrow-${idx}">▸</span>
+              </div>
+            </div>
+            <div class="alerte-body" id="body-${idx}">
+              ${hasDetail ? `
+                <div class="protocol-grid">
+                  <div class="protocol-block">
+                    <h4>Déclenchement</h4>
+                    <p><strong>Situation :</strong> ${escapeHtml(a.declenchement_situation || '—')}</p>
+                    <p><strong>Infos requises :</strong> ${escapeHtml(a.declenchement_infos || '—')}</p>
+                    <p><strong>Autorisation :</strong> ${escapeHtml(a.declenchement_autorisation || '—')}</p>
+                  </div>
+                  <div class="protocol-block">
+                    <h4>Mobilisation</h4>
+                    <p><strong>Alerté :</strong> ${escapeHtml(a.mobilisation_alerte || '—')}</p>
+                    <p><strong>Effectif :</strong> ${escapeHtml(a.mobilisation_effectif || '—')}</p>
+                    <p><strong>Zones :</strong> ${escapeHtml(a.mobilisation_zones || '—')}</p>
+                  </div>
+                </div>
+                ${a.actions ? `
+                  <h4 style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--or-300)">Actions à mener</h4>
+                  <ul class="actions-list">${a.actions.split('\n').filter(Boolean).map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+                ` : ''}
+              ` : '<p class="muted mb-0">Détails à compléter par un haut gradé habilité.</p>'}
+            </div>
+          </div>`;
+        }).join('');
+
+        container.querySelectorAll('[data-toggle]').forEach(head => {
+          head.addEventListener('click', () => {
+            const idx = head.dataset.toggle;
+            document.getElementById(`body-${idx}`).classList.toggle('open');
+            document.getElementById(`arrow-${idx}`).classList.toggle('open');
+          });
+        });
+        if (canManage) {
+          container.querySelectorAll('[data-edit]').forEach(btn => {
+            btn.addEventListener('click', () => openModal(alertesCache.find(a => a.id == btn.dataset.edit)));
+          });
+          container.querySelectorAll('[data-delete]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer ce code d\'alerte ?')) return;
+              try { await api(`/alertes/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Code supprimé.'); loadAlertes(canManage); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(a = null) {
+      document.getElementById('alerte-form').reset();
+      document.getElementById('a-couleur').value = '#3E5C6B';
+      document.getElementById('a-ordre').value = 0;
+      if (a) {
+        document.getElementById('modal-title').textContent = 'Modifier le code d\'alerte';
+        document.getElementById('a-id').value = a.id;
+        document.getElementById('a-nom').value = a.nom;
+        document.getElementById('a-couleur').value = a.couleur;
+        document.getElementById('a-ordre').value = a.ordre;
+        document.getElementById('a-desc').value = a.description_courte;
+        document.getElementById('a-decl-situation').value = a.declenchement_situation;
+        document.getElementById('a-decl-infos').value = a.declenchement_infos;
+        document.getElementById('a-decl-autorisation').value = a.declenchement_autorisation;
+        document.getElementById('a-mob-alerte').value = a.mobilisation_alerte;
+        document.getElementById('a-mob-effectif').value = a.mobilisation_effectif;
+        document.getElementById('a-mob-zones').value = a.mobilisation_zones;
+        document.getElementById('a-actions').value = a.actions;
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau code d\'alerte';
+        document.getElementById('a-id').value = '';
+      }
+      document.getElementById('alerte-modal').classList.add('open');
+    }
+
+    async function saveAlerte(e) {
+      e.preventDefault();
+      const id = document.getElementById('a-id').value;
+      const payload = {
+        nom: document.getElementById('a-nom').value.trim(),
+        couleur: document.getElementById('a-couleur').value,
+        ordre: parseInt(document.getElementById('a-ordre').value) || 0,
+        description_courte: document.getElementById('a-desc').value.trim(),
+        declenchement_situation: document.getElementById('a-decl-situation').value.trim(),
+        declenchement_infos: document.getElementById('a-decl-infos').value.trim(),
+        declenchement_autorisation: document.getElementById('a-decl-autorisation').value.trim(),
+        mobilisation_alerte: document.getElementById('a-mob-alerte').value.trim(),
+        mobilisation_effectif: document.getElementById('a-mob-effectif').value.trim(),
+        mobilisation_zones: document.getElementById('a-mob-zones').value.trim(),
+        actions: document.getElementById('a-actions').value,
+      };
+      try {
+        if (id) await api(`/alertes/${id}`, { method: 'PUT', body: payload });
+        else await api('/alertes', { method: 'POST', body: payload });
+        toast('Code d\'alerte enregistré.');
+        document.getElementById('alerte-modal').classList.remove('open');
+        loadAlertes(true);
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  </script>
+</body>
+</html>

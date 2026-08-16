@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code pénal — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Textes en vigueur</h1>
+          <p class="muted">Code pénal du village et du Pays du Vent — infractions, amendes et sanctions applicables.</p>
+        </div>
+        <button class="btn btn-primary hidden" id="new-article-btn">+ Nouvel article</button>
+      </div>
+
+      <div id="code-content"><div class="loader">Chargement du code pénal…</div></div>
+
+      <section>
+        <h2>Système de blâmes</h2>
+        <div class="flex-between" style="margin-bottom:12px">
+          <p class="muted mb-0" style="max-width:600px">Escalade appliquée en cas de manquement disciplinaire répété.</p>
+          <button class="btn btn-secondary btn-sm hidden" id="new-blame-btn">+ Ajouter un niveau</button>
+        </div>
+        <div id="blames-list" class="grid grid-2"><div class="loader">Chargement…</div></div>
+      </section>
+
+      <section>
+        <h2>Système de récidive globale</h2>
+        <div class="flex-between" style="margin-bottom:12px">
+          <p class="muted mb-0" style="max-width:600px">Multiplicateurs appliqués à l'amende et au temps de cellule selon le nombre d'infractions déjà commises.</p>
+          <button class="btn btn-secondary btn-sm hidden" id="new-recidive-btn">+ Ajouter un palier</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Occurrence</th><th>Amende ×</th><th>Cellule ×</th><th>Blâme appliqué</th><th>Cas spécial</th><th></th></tr></thead>
+            <tbody id="recidives-tbody"><tr><td colspan="6" class="loader">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modale article code pénal -->
+  <div class="modal-backdrop" id="article-modal">
+    <div class="modal">
+      <h3 id="article-modal-title">Nouvel article</h3>
+      <form id="article-form">
+        <input type="hidden" id="s-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="s-code">Code juridique</label>
+            <select id="s-code">
+              <option value="Village">Village</option>
+              <option value="Pays du Vent">Pays du Vent</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="s-categorie">Catégorie</label>
+            <select id="s-categorie">
+              <option value="Délits mineurs">Délits mineurs</option>
+              <option value="Délits majeurs">Délits majeurs</option>
+              <option value="Crimes">Crimes</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="s-article">N° d'article</label>
+            <input type="text" id="s-article" placeholder="Ex : 1.11" />
+          </div>
+          <div class="field">
+            <label for="s-gravite">Gravité (1-5)</label>
+            <input type="number" id="s-gravite" min="1" max="5" value="1" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="s-nom">Infraction *</label>
+          <input type="text" id="s-nom" required />
+        </div>
+        <div class="field">
+          <label for="s-description">Détails (optionnel)</label>
+          <textarea id="s-description" rows="2"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="s-amende">Amende (ryō)</label>
+            <input type="number" id="s-amende" min="0" placeholder="Laisser vide si sans objet" />
+          </div>
+          <div class="field">
+            <label for="s-cellule">Cellule / T.I.G</label>
+            <input type="text" id="s-cellule" placeholder="Ex : 10 min, Jugement…" />
+          </div>
+        </div>
+        <div class="field">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+            <input type="checkbox" id="s-actif" checked style="width:auto"> Article actif
+          </label>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="article-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale blâme -->
+  <div class="modal-backdrop" id="blame-modal">
+    <div class="modal">
+      <h3 id="blame-modal-title">Niveau de blâme</h3>
+      <form id="blame-form">
+        <input type="hidden" id="b-id" />
+        <div class="field">
+          <label for="b-niveau">Niveau</label>
+          <input type="number" id="b-niveau" min="1" required />
+        </div>
+        <div class="field">
+          <label for="b-description">Description *</label>
+          <textarea id="b-description" rows="2" required></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="blame-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale récidive -->
+  <div class="modal-backdrop" id="recidive-modal">
+    <div class="modal">
+      <h3 id="recidive-modal-title">Palier de récidive</h3>
+      <form id="recidive-form">
+        <input type="hidden" id="r-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="r-occurrence">Occurrence *</label>
+            <input type="text" id="r-occurrence" placeholder="Ex : 1ère, 2ème…" required />
+          </div>
+          <div class="field">
+            <label for="r-ordre">Ordre d'affichage</label>
+            <input type="number" id="r-ordre" value="0" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="r-amende-mult">Multiplicateur amende</label>
+            <input type="number" id="r-amende-mult" step="0.1" placeholder="Ex : 1.5" />
+          </div>
+          <div class="field">
+            <label for="r-cellule-mult">Multiplicateur cellule</label>
+            <input type="number" id="r-cellule-mult" step="0.1" placeholder="Ex : 2" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="r-blame">Niveau de blâme appliqué</label>
+          <input type="number" id="r-blame" min="1" placeholder="Laisser vide si aucun" />
+        </div>
+        <div class="field">
+          <label for="r-special">Cas spécial (texte libre)</label>
+          <input type="text" id="r-special" placeholder="Ex : Emprisonnement à vie (RPK)" />
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="recidive-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user, sanctionsCache = [];
+    const catOrder = { 'Délits mineurs': 1, 'Délits majeurs': 2, 'Crimes': 3 };
+
+    (async function () {
+      user = await initLayout({ activeKey: '' });
+      const canManage = !!(user && user.permissions.peut_gerer_sanctions);
+      if (canManage) {
+        document.getElementById('new-article-btn').classList.remove('hidden');
+        document.getElementById('new-blame-btn').classList.remove('hidden');
+        document.getElementById('new-recidive-btn').classList.remove('hidden');
+      }
+      document.getElementById('new-article-btn').addEventListener('click', () => openArticleModal());
+      document.getElementById('article-cancel').addEventListener('click', () => document.getElementById('article-modal').classList.remove('open'));
+      document.getElementById('article-form').addEventListener('submit', saveArticle);
+
+      document.getElementById('new-blame-btn').addEventListener('click', () => openBlameModal());
+      document.getElementById('blame-cancel').addEventListener('click', () => document.getElementById('blame-modal').classList.remove('open'));
+      document.getElementById('blame-form').addEventListener('submit', saveBlame);
+
+      document.getElementById('new-recidive-btn').addEventListener('click', () => openRecidiveModal());
+      document.getElementById('recidive-cancel').addEventListener('click', () => document.getElementById('recidive-modal').classList.remove('open'));
+      document.getElementById('recidive-form').addEventListener('submit', saveRecidive);
+
+      loadCode(canManage);
+      loadBlames(canManage);
+      loadRecidives(canManage);
+    })();
+
+    async function loadCode(canManage) {
+      const container = document.getElementById('code-content');
+      try {
+        const { sanctions } = await api('/sanctions');
+        sanctionsCache = sanctions;
+        if (sanctions.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun article défini pour le moment.</div>';
+          return;
+        }
+        const codes = [...new Set(sanctions.map(s => s.code_juridique))];
+        container.innerHTML = codes.map(code => {
+          const items = sanctions.filter(s => s.code_juridique === code)
+            .sort((a, b) => (catOrder[a.categorie] - catOrder[b.categorie]) || a.ordre - b.ordre);
+          const byCat = {};
+          items.forEach(s => { (byCat[s.categorie] = byCat[s.categorie] || []).push(s); });
+
+          return `
+            <div style="margin-bottom:32px">
+              <h2 style="font-size:1.2rem; color:var(--argile-500)">◈ ${code === 'Village' ? 'Droit interne du village' : 'Code pénal du ' + code} ◈</h2>
+              ${Object.entries(byCat).map(([cat, arts]) => `
+                <div class="table-wrap" style="margin-bottom:18px">
+                  <table>
+                    <thead><tr><th>Art.</th><th>${cat}</th><th>Amende</th><th>Cellule / T.I.G</th>${canManage ? '<th></th>' : ''}</tr></thead>
+                    <tbody>
+                      ${arts.map(a => `
+                        <tr style="${a.actif ? '' : 'opacity:0.45'}">
+                          <td style="font-family:var(--font-mono)">${escapeHtml(a.article || '—')}</td>
+                          <td>${escapeHtml(a.nom)}${a.description ? `<div class="muted" style="font-size:0.78rem">${escapeHtml(a.description)}</div>` : ''}</td>
+                          <td>${a.amende ? a.amende.toLocaleString('fr-FR') + ' ryō' : '/'}</td>
+                          <td>${escapeHtml(a.cellule_tig || '—')}</td>
+                          ${canManage ? `<td class="flex gap-8">
+                            <button class="btn btn-secondary btn-sm" data-edit-article="${a.id}">Modifier</button>
+                            <button class="btn btn-danger btn-sm" data-del-article="${a.id}">Suppr.</button>
+                          </td>` : ''}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `).join('')}
+            </div>`;
+        }).join('');
+
+        if (canManage) {
+          container.querySelectorAll('[data-edit-article]').forEach(btn => {
+            btn.addEventListener('click', () => openArticleModal(sanctionsCache.find(s => s.id == btn.dataset.editArticle)));
+          });
+          container.querySelectorAll('[data-del-article]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer cet article ?')) return;
+              try {
+                await api(`/sanctions/${btn.dataset.delArticle}`, { method: 'DELETE' });
+                toast('Article supprimé.');
+                loadCode(canManage);
+              } catch (err) { toast(err.message, 'error'); }
+            });
+          });
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openArticleModal(article = null) {
+      document.getElementById('article-form').reset();
+      document.getElementById('s-gravite').value = 1;
+      document.getElementById('s-actif').checked = true;
+      if (article) {
+        document.getElementById('article-modal-title').textContent = "Modifier l'article";
+        document.getElementById('s-id').value = article.id;
+        document.getElementById('s-code').value = article.code_juridique;
+        document.getElementById('s-categorie').value = article.categorie;
+        document.getElementById('s-article').value = article.article;
+        document.getElementById('s-nom').value = article.nom;
+        document.getElementById('s-description').value = article.description;
+        document.getElementById('s-amende').value = article.amende ?? '';
+        document.getElementById('s-cellule').value = article.cellule_tig;
+        document.getElementById('s-gravite').value = article.gravite;
+        document.getElementById('s-actif').checked = article.actif;
+      } else {
+        document.getElementById('article-modal-title').textContent = 'Nouvel article';
+        document.getElementById('s-id').value = '';
+      }
+      document.getElementById('article-modal').classList.add('open');
+    }
+
+    async function saveArticle(e) {
+      e.preventDefault();
+      const id = document.getElementById('s-id').value;
+      const payload = {
+        code_juridique: document.getElementById('s-code').value,
+        categorie: document.getElementById('s-categorie').value,
+        article: document.getElementById('s-article').value.trim(),
+        nom: document.getElementById('s-nom').value.trim(),
+        description: document.getElementById('s-description').value.trim(),
+        amende: document.getElementById('s-amende').value === '' ? null : parseInt(document.getElementById('s-amende').value),
+        cellule_tig: document.getElementById('s-cellule').value.trim(),
+        gravite: parseInt(document.getElementById('s-gravite').value) || 1,
+        actif: document.getElementById('s-actif').checked,
+      };
+      try {
+        if (id) { await api(`/sanctions/${id}`, { method: 'PUT', body: payload }); toast('Article mis à jour.'); }
+        else { await api('/sanctions', { method: 'POST', body: payload }); toast('Article créé.'); }
+        document.getElementById('article-modal').classList.remove('open');
+        loadCode(true);
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Blâmes ---
+    let blamesCache = [];
+    async function loadBlames(canManage) {
+      const container = document.getElementById('blames-list');
+      try {
+        const { blames } = await api('/blames');
+        blamesCache = blames;
+        if (blames.length === 0) { container.innerHTML = '<div class="empty-state">Aucun blâme défini.</div>'; return; }
+        container.innerHTML = blames.map(b => `
+          <div class="card">
+            <div class="flex-between">
+              <span class="badge badge-warn">Blâme ${b.niveau}</span>
+              ${canManage ? `<div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit-blame="${b.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-del-blame="${b.id}">Suppr.</button>
+              </div>` : ''}
+            </div>
+            <p class="mb-0" style="margin-top:8px">${escapeHtml(b.description)}</p>
+          </div>
+        `).join('');
+        if (canManage) {
+          container.querySelectorAll('[data-edit-blame]').forEach(btn => {
+            btn.addEventListener('click', () => openBlameModal(blamesCache.find(b => b.id == btn.dataset.editBlame)));
+          });
+          container.querySelectorAll('[data-del-blame]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer ce blâme ?')) return;
+              try { await api(`/blames/${btn.dataset.delBlame}`, { method: 'DELETE' }); toast('Blâme supprimé.'); loadBlames(canManage); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+    function openBlameModal(blame = null) {
+      document.getElementById('blame-form').reset();
+      if (blame) {
+        document.getElementById('blame-modal-title').textContent = 'Modifier le blâme';
+        document.getElementById('b-id').value = blame.id;
+        document.getElementById('b-niveau').value = blame.niveau;
+        document.getElementById('b-description').value = blame.description;
+      } else {
+        document.getElementById('blame-modal-title').textContent = 'Nouveau blâme';
+        document.getElementById('b-id').value = '';
+      }
+      document.getElementById('blame-modal').classList.add('open');
+    }
+    async function saveBlame(e) {
+      e.preventDefault();
+      const id = document.getElementById('b-id').value;
+      const payload = { niveau: parseInt(document.getElementById('b-niveau').value), description: document.getElementById('b-description').value.trim() };
+      try {
+        if (id) await api(`/blames/${id}`, { method: 'PUT', body: payload });
+        else await api('/blames', { method: 'POST', body: payload });
+        toast('Blâme enregistré.');
+        document.getElementById('blame-modal').classList.remove('open');
+        loadBlames(true);
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Récidive ---
+    let recidivesCache = [];
+    async function loadRecidives(canManage) {
+      const tbody = document.getElementById('recidives-tbody');
+      try {
+        const { recidives } = await api('/recidives');
+        recidivesCache = recidives;
+        if (recidives.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Aucun palier défini.</td></tr>'; return; }
+        tbody.innerHTML = recidives.map(r => `
+          <tr>
+            <td><strong>${escapeHtml(r.occurrence)}</strong></td>
+            <td>${r.amende_multiplicateur ? '×' + r.amende_multiplicateur : '—'}</td>
+            <td>${r.cellule_multiplicateur ? '×' + r.cellule_multiplicateur : '—'}</td>
+            <td>${r.blame_niveau ? 'Blâme ' + r.blame_niveau : '—'}</td>
+            <td>${escapeHtml(r.description_speciale || '—')}</td>
+            <td class="flex gap-8">
+              ${canManage ? `<button class="btn btn-secondary btn-sm" data-edit-recidive="${r.id}">Modifier</button>
+              <button class="btn btn-danger btn-sm" data-del-recidive="${r.id}">Suppr.</button>` : ''}
+            </td>
+          </tr>
+        `).join('');
+        if (canManage) {
+          tbody.querySelectorAll('[data-edit-recidive]').forEach(btn => {
+            btn.addEventListener('click', () => openRecidiveModal(recidivesCache.find(r => r.id == btn.dataset.editRecidive)));
+          });
+          tbody.querySelectorAll('[data-del-recidive]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer ce palier ?')) return;
+              try { await api(`/recidives/${btn.dataset.delRecidive}`, { method: 'DELETE' }); toast('Palier supprimé.'); loadRecidives(canManage); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${escapeHtml(err.message)}</div></td></tr>`;
+      }
+    }
+    function openRecidiveModal(recidive = null) {
+      document.getElementById('recidive-form').reset();
+      document.getElementById('r-ordre').value = 0;
+      if (recidive) {
+        document.getElementById('recidive-modal-title').textContent = 'Modifier le palier';
+        document.getElementById('r-id').value = recidive.id;
+        document.getElementById('r-occurrence').value = recidive.occurrence;
+        document.getElementById('r-ordre').value = recidive.ordre;
+        document.getElementById('r-amende-mult').value = recidive.amende_multiplicateur ?? '';
+        document.getElementById('r-cellule-mult').value = recidive.cellule_multiplicateur ?? '';
+        document.getElementById('r-blame').value = recidive.blame_niveau ?? '';
+        document.getElementById('r-special').value = recidive.description_speciale;
+      } else {
+        document.getElementById('recidive-modal-title').textContent = 'Nouveau palier';
+        document.getElementById('r-id').value = '';
+      }
+      document.getElementById('recidive-modal').classList.add('open');
+    }
+    async function saveRecidive(e) {
+      e.preventDefault();
+      const id = document.getElementById('r-id').value;
+      const payload = {
+        occurrence: document.getElementById('r-occurrence').value.trim(),
+        ordre: parseInt(document.getElementById('r-ordre').value) || 0,
+        amende_multiplicateur: document.getElementById('r-amende-mult').value === '' ? null : parseFloat(document.getElementById('r-amende-mult').value),
+        cellule_multiplicateur: document.getElementById('r-cellule-mult').value === '' ? null : parseFloat(document.getElementById('r-cellule-mult').value),
+        blame_niveau: document.getElementById('r-blame').value === '' ? null : parseInt(document.getElementById('r-blame').value),
+        description_speciale: document.getElementById('r-special').value.trim(),
+      };
+      try {
+        if (id) await api(`/recidives/${id}`, { method: 'PUT', body: payload });
+        else await api('/recidives', { method: 'POST', body: payload });
+        toast('Palier enregistré.');
+        document.getElementById('recidive-modal').classList.remove('open');
+        loadRecidives(true);
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  </script>
+</body>
+</html>

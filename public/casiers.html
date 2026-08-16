@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casiers judiciaires — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Casiers judiciaires</h1>
+          <p class="muted">Registre des suspects et individus recherchés par le village.</p>
+        </div>
+        <button class="btn btn-primary" id="new-casier-btn">+ Nouveau casier</button>
+      </div>
+
+      <div class="field" style="max-width:360px; margin-bottom:24px">
+        <input type="text" id="search-input" placeholder="Rechercher un nom, prénom ou surnom…" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+      </div>
+
+      <div id="casiers-grid" class="grid grid-3">
+        <div class="loader">Chargement des casiers…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale de création/édition -->
+  <div class="modal-backdrop" id="casier-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouveau casier</h3>
+      <form id="casier-form">
+        <input type="hidden" id="casier-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="c-nom">Nom *</label>
+            <input type="text" id="c-nom" required />
+          </div>
+          <div class="field">
+            <label for="c-prenom">Prénom</label>
+            <input type="text" id="c-prenom" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="c-surnom">Surnom</label>
+            <input type="text" id="c-surnom" />
+          </div>
+          <div class="field">
+            <label for="c-age">Âge</label>
+            <input type="number" id="c-age" min="0" max="200" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="c-village">Village d'origine</label>
+            <input type="text" id="c-village" placeholder="Ex : Sunagakure" />
+          </div>
+          <div class="field">
+            <label for="c-danger">Niveau de danger (1-5)</label>
+            <input type="number" id="c-danger" min="1" max="5" value="1" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-statut">Statut</label>
+          <select id="c-statut">
+            <option value="libre">Libre</option>
+            <option value="recherche">Recherché</option>
+            <option value="detention">En détention</option>
+            <option value="liberation_conditionnelle">Libération conditionnelle</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="c-photo">URL de photo (optionnel)</label>
+          <input type="url" id="c-photo" placeholder="https://…" />
+        </div>
+        <div class="field">
+          <label for="c-description">Description</label>
+          <textarea id="c-description" rows="3"></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user;
+    (async function () {
+      user = await initLayout({ activeKey: 'casiers', requireAuth: true });
+      if (!user) return;
+
+      if (!user.permissions.peut_gerer_casiers) {
+        document.getElementById('new-casier-btn').classList.add('hidden');
+      }
+
+      loadCasiers();
+      document.getElementById('new-casier-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', closeModal);
+      document.getElementById('casier-form').addEventListener('submit', saveCasier);
+
+      const editId = new URLSearchParams(window.location.search).get('edit');
+      if (editId && user.permissions.peut_gerer_casiers) {
+        try {
+          const { casier } = await api(`/casiers/${editId}`);
+          openModal(casier);
+        } catch (_) { /* silencieux */ }
+      }
+
+      let searchTimer;
+      document.getElementById('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadCasiers(e.target.value), 300);
+      });
+    })();
+
+    const statutLabels = {
+      libre: ['Libre', 'badge-ok'],
+      recherche: ['Recherché', 'badge-danger'],
+      detention: ['En détention', 'badge-warn'],
+      liberation_conditionnelle: ['Libération conditionnelle', 'badge-muted'],
+    };
+
+    async function loadCasiers(q = '') {
+      const grid = document.getElementById('casiers-grid');
+      try {
+        const { casiers } = await api('/casiers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+        if (casiers.length === 0) {
+          grid.innerHTML = '<div class="empty-state">Aucun casier trouvé.</div>';
+          return;
+        }
+        grid.innerHTML = casiers.map((c) => {
+          const [label, cls] = statutLabels[c.statut] || ['Inconnu', 'badge-muted'];
+          return `
+            <a href="casier-detail.html?id=${c.id}" class="dossier" data-tab="Dossier n°${c.id}">
+              <div class="flex-between" style="margin-bottom:8px">
+                <span class="badge ${cls}">${label}</span>
+                <span class="badge badge-danger" style="opacity:${c.niveau_danger / 5}">Danger ${c.niveau_danger}/5</span>
+              </div>
+              <h3>${escapeHtml(c.nom)} ${escapeHtml(c.prenom || '')}</h3>
+              ${c.surnom ? `<div class="meta">dit "${escapeHtml(c.surnom)}"</div>` : ''}
+              <div class="meta">${escapeHtml(c.village || 'Village inconnu')}${c.age ? ' · ' + c.age + ' ans' : ''}</div>
+            </a>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(casier = null) {
+      document.getElementById('casier-form').reset();
+      if (casier) {
+        document.getElementById('modal-title').textContent = 'Modifier le casier';
+        document.getElementById('casier-id').value = casier.id;
+        document.getElementById('c-nom').value = casier.nom || '';
+        document.getElementById('c-prenom').value = casier.prenom || '';
+        document.getElementById('c-surnom').value = casier.surnom || '';
+        document.getElementById('c-age').value = casier.age || '';
+        document.getElementById('c-village').value = casier.village || '';
+        document.getElementById('c-danger').value = casier.niveau_danger || 1;
+        document.getElementById('c-statut').value = casier.statut || 'libre';
+        document.getElementById('c-photo').value = casier.photo_url || '';
+        document.getElementById('c-description').value = casier.description || '';
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau casier';
+        document.getElementById('c-danger').value = 1;
+        document.getElementById('casier-id').value = '';
+      }
+      document.getElementById('casier-modal').classList.add('open');
+    }
+    function closeModal() {
+      document.getElementById('casier-modal').classList.remove('open');
+    }
+
+    async function saveCasier(e) {
+      e.preventDefault();
+      const id = document.getElementById('casier-id').value;
+      const payload = {
+        nom: document.getElementById('c-nom').value.trim(),
+        prenom: document.getElementById('c-prenom').value.trim(),
+        surnom: document.getElementById('c-surnom').value.trim(),
+        village: document.getElementById('c-village').value.trim(),
+        age: document.getElementById('c-age').value ? parseInt(document.getElementById('c-age').value) : null,
+        statut: document.getElementById('c-statut').value,
+        photo_url: document.getElementById('c-photo').value.trim(),
+        description: document.getElementById('c-description').value.trim(),
+        niveau_danger: parseInt(document.getElementById('c-danger').value) || 1,
+      };
+      try {
+        if (id) {
+          await api(`/casiers/${id}`, { method: 'PUT', body: payload });
+          toast('Casier mis à jour.');
+        } else {
+          await api('/casiers', { method: 'POST', body: payload });
+          toast('Casier créé.');
+        }
+        closeModal();
+        loadCasiers(document.getElementById('search-input').value);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

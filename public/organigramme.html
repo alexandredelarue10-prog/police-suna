@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Organigramme — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <h1>Organigramme</h1>
+      <p class="muted" style="margin-bottom:28px">Hiérarchie officielle de la Force de Police de Sunagakure, du grade le plus élevé au plus jeune.</p>
+      <div id="org-content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      await initLayout({ activeKey: 'organigramme' });
+      loadOrg();
+    })();
+
+    async function loadOrg() {
+      const container = document.getElementById('org-content');
+      try {
+        const { organigramme } = await api('/grades/organigramme');
+        if (organigramme.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun grade défini pour le moment.</div>';
+          return;
+        }
+        container.innerHTML = organigramme.map(g => `
+          <div class="rank-band" style="border-left-color:${g.couleur}">
+            <span class="rank-name" style="color:${g.couleur}">${escapeHtml(g.nom)}</span>
+            <div class="rank-members">
+              ${g.membres.length === 0
+                ? '<span class="muted" style="font-size:0.82rem">Aucun membre actuellement</span>'
+                : g.membres.map(m => `<span class="member-chip">${escapeHtml(m.nom_complet || m.username)}${m.rang_ninja ? ` · ${escapeHtml(m.rang_ninja)}` : ''}${m.brigade ? ` · ${escapeHtml(m.brigade)}` : ''}</span>`).join('')}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

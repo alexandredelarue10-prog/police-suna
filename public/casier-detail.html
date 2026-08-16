@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Détail du casier — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <p><a href="casiers.html">← Retour aux casiers</a></p>
+      <div id="casier-content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <!-- Modale ajout infraction -->
+  <div class="modal-backdrop" id="infraction-modal">
+    <div class="modal">
+      <h3>Ajouter une infraction</h3>
+      <form id="infraction-form">
+        <div class="field">
+          <label for="i-sanction">Type de sanction (barème)</label>
+          <select id="i-sanction">
+            <option value="">— Sanction libre (personnalisée) —</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="i-titre">Titre de l'infraction *</label>
+          <input type="text" id="i-titre" required />
+        </div>
+        <div class="field">
+          <label for="i-description">Description</label>
+          <textarea id="i-description" rows="3"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="i-amende">Amende (ryō)</label>
+            <input type="number" id="i-amende" min="0" />
+          </div>
+          <div class="field">
+            <label for="i-cellule">Cellule / T.I.G</label>
+            <input type="text" id="i-cellule" placeholder="Ex : 10 min, Jugement…" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="i-recidive">Occurrence de récidive</label>
+            <select id="i-recidive">
+              <option value="">— Aucune —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="i-date">Date</label>
+            <input type="date" id="i-date" />
+          </div>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="infraction-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user, casierId, sanctionsCache = [];
+
+    (async function () {
+      user = await initLayout({ activeKey: 'casiers', requireAuth: true });
+      if (!user) return;
+
+      const params = new URLSearchParams(window.location.search);
+      casierId = params.get('id');
+      if (!casierId) { window.location.href = 'casiers.html'; return; }
+
+      loadDetail();
+      document.getElementById('infraction-cancel').addEventListener('click', () => {
+        document.getElementById('infraction-modal').classList.remove('open');
+      });
+      document.getElementById('infraction-form').addEventListener('submit', addInfraction);
+
+      if (user.permissions.peut_gerer_casiers) {
+        try {
+          const { sanctions } = await api('/sanctions');
+          sanctionsCache = sanctions;
+          const select = document.getElementById('i-sanction');
+          sanctions.filter(s => s.actif).forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            const amendeLabel = s.amende ? s.amende.toLocaleString('fr-FR') + ' ryō' : 'jugement';
+            opt.textContent = `Art. ${s.article || '—'} — ${s.nom} (${amendeLabel})`;
+            select.appendChild(opt);
+          });
+          select.addEventListener('change', () => {
+            const s = sanctionsCache.find(x => String(x.id) === select.value);
+            if (s) {
+              document.getElementById('i-titre').value = s.nom;
+              document.getElementById('i-description').value = s.description;
+              document.getElementById('i-amende').value = s.amende ?? '';
+              document.getElementById('i-cellule').value = s.cellule_tig;
+            }
+          });
+
+          const { recidives } = await api('/recidives');
+          const recSelect = document.getElementById('i-recidive');
+          recidives.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.occurrence;
+            opt.textContent = r.occurrence;
+            recSelect.appendChild(opt);
+          });
+        } catch (_) { /* silencieux */ }
+      }
+    })();
+
+    const statutLabels = {
+      libre: ['Libre', 'badge-ok'],
+      recherche: ['Recherché', 'badge-danger'],
+      detention: ['En détention', 'badge-warn'],
+      liberation_conditionnelle: ['Libération conditionnelle', 'badge-muted'],
+    };
+
+    async function loadDetail() {
+      const container = document.getElementById('casier-content');
+      try {
+        const { casier, infractions } = await api(`/casiers/${casierId}`);
+        const [label, cls] = statutLabels[casier.statut] || ['Inconnu', 'badge-muted'];
+        const canManage = user.permissions.peut_gerer_casiers;
+
+        container.innerHTML = `
+          <div class="card" style="margin-bottom:24px">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:12px">
+              <div>
+                <span class="badge ${cls}">${label}</span>
+                <span class="badge badge-danger">Danger ${casier.niveau_danger}/5</span>
+                <h1 style="margin-top:10px">${escapeHtml(casier.nom)} ${escapeHtml(casier.prenom || '')}</h1>
+                ${casier.surnom ? `<p class="muted mb-0">dit "${escapeHtml(casier.surnom)}"</p>` : ''}
+              </div>
+              ${canManage ? `<div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" id="edit-btn">Modifier</button>
+                <button class="btn btn-danger btn-sm" id="delete-btn">Supprimer</button>
+              </div>` : ''}
+            </div>
+            <div class="grid grid-3" style="margin-top:20px">
+              <div><strong>Village</strong><p class="mb-0">${escapeHtml(casier.village || '—')}</p></div>
+              <div><strong>Âge</strong><p class="mb-0">${casier.age || '—'}</p></div>
+              <div><strong>Dossier n°</strong><p class="mb-0">${casier.id}</p></div>
+            </div>
+            ${casier.description ? `<p style="margin-top:16px">${escapeHtml(casier.description)}</p>` : ''}
+          </div>
+
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.2rem">Infractions (${infractions.length})</h2>
+            ${canManage ? '<button class="btn btn-primary btn-sm" id="add-infraction-btn">+ Ajouter une infraction</button>' : ''}
+          </div>
+
+          <div id="infractions-list">
+            ${infractions.length === 0 ? '<div class="empty-state">Aucune infraction enregistrée.</div>' :
+              infractions.map(i => `
+                <div class="card" style="margin-bottom:12px">
+                  <div class="flex-between" style="align-items:flex-start">
+                    <div>
+                      <h3 style="font-size:1rem; margin-bottom:4px">${escapeHtml(i.titre)}</h3>
+                      <p class="muted" style="font-size:0.8rem; margin-bottom:8px">
+                        ${formatDate(i.date_infraction)} · Enregistré par ${escapeHtml(i.agent_username || 'inconnu')}
+                      </p>
+                    </div>
+                    ${canManage ? `<button class="btn btn-danger btn-sm" data-del-infraction="${i.id}">Supprimer</button>` : ''}
+                  </div>
+                  ${i.description ? `<p style="font-size:0.88rem">${escapeHtml(i.description)}</p>` : ''}
+                  <p class="mb-0" style="font-size:0.85rem">
+                    ${i.amende_appliquee ? `<strong>Amende :</strong> ${i.amende_appliquee.toLocaleString('fr-FR')} ryō &nbsp;` : ''}
+                    ${i.cellule_appliquee ? `<strong>Cellule/T.I.G :</strong> ${escapeHtml(i.cellule_appliquee)} &nbsp;` : ''}
+                    ${i.occurrence_recidive ? `<span class="badge badge-warn">${escapeHtml(i.occurrence_recidive)} récidive</span>` : ''}
+                  </p>
+                </div>
+              `).join('')
+            }
+          </div>
+        `;
+
+        if (canManage) {
+          document.getElementById('add-infraction-btn').addEventListener('click', () => {
+            document.getElementById('infraction-form').reset();
+            document.getElementById('i-date').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('infraction-modal').classList.add('open');
+          });
+          document.getElementById('delete-btn').addEventListener('click', () => deleteCasier(casier));
+          document.getElementById('edit-btn').addEventListener('click', () => {
+            window.location.href = `casiers.html?edit=${casier.id}`;
+          });
+          document.querySelectorAll('[data-del-infraction]').forEach(btn => {
+            btn.addEventListener('click', () => deleteInfraction(btn.dataset.delInfraction));
+          });
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function addInfraction(e) {
+      e.preventDefault();
+      const payload = {
+        sanction_id: document.getElementById('i-sanction').value || null,
+        titre: document.getElementById('i-titre').value.trim(),
+        description: document.getElementById('i-description').value.trim(),
+        amende_appliquee: document.getElementById('i-amende').value === '' ? null : parseInt(document.getElementById('i-amende').value),
+        cellule_appliquee: document.getElementById('i-cellule').value.trim(),
+        occurrence_recidive: document.getElementById('i-recidive').value,
+        date_infraction: document.getElementById('i-date').value || null,
+      };
+      try {
+        await api(`/casiers/${casierId}/infractions`, { method: 'POST', body: payload });
+        document.getElementById('infraction-modal').classList.remove('open');
+        toast('Infraction ajoutée.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deleteInfraction(id) {
+      if (!confirm('Supprimer cette infraction ?')) return;
+      try {
+        await api(`/casiers/infractions/${id}`, { method: 'DELETE' });
+        toast('Infraction supprimée.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deleteCasier(casier) {
+      if (!confirm(`Supprimer définitivement le casier de ${casier.nom} ?`)) return;
+      try {
+        await api(`/casiers/${casierId}`, { method: 'DELETE' });
+        toast('Casier supprimé.');
+        window.location.href = 'casiers.html';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

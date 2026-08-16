@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion des comptes — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <h1>Gestion des comptes</h1>
+      <p class="muted" style="margin-bottom:28px">Validez les demandes d'accès, attribuez les grades, ou supprimez des comptes.</p>
+
+      <div class="section-head">
+        <h2 class="mb-0" style="font-size:1.15rem">Demandes en attente</h2>
+      </div>
+      <div id="pending-list" style="margin-bottom:40px"><div class="loader">Chargement…</div></div>
+
+      <div class="section-head">
+        <h2 class="mb-0" style="font-size:1.15rem">Tous les comptes</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="users-table">
+          <thead>
+            <tr><th>Utilisateur</th><th>Nom complet</th><th>Grade (poste)</th><th>Rang ninja</th><th>Statut</th><th>Matricule</th><th></th></tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="loader">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let gradesCache = [];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'admin-comptes', requireAuth: true, requirePerm: 'peut_valider_comptes' });
+      if (!user) return;
+      const { grades } = await api('/grades');
+      gradesCache = grades;
+      loadUsers();
+    })();
+
+    const statutLabels = {
+      en_attente: ['En attente', 'badge-warn'],
+      approuve: ['Approuvé', 'badge-ok'],
+      refuse: ['Refusé', 'badge-danger'],
+    };
+
+    const rangsNinja = ['Genin', 'Chûnin', 'Kakunin', 'TKJ', 'Jônin'];
+
+    function gradeSelectHtml(selectedId) {
+      return `<select class="grade-select">
+        <option value="">— Aucun grade —</option>
+        ${gradesCache.map(g => `<option value="${g.id}" ${String(g.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(g.nom)}</option>`).join('')}
+      </select>`;
+    }
+
+    function rangSelectHtml(selected) {
+      return `<select class="rang-select">
+        <option value="">— Aucun —</option>
+        ${rangsNinja.map(r => `<option value="${r}" ${r === selected ? 'selected' : ''}>${r}</option>`).join('')}
+      </select>`;
+    }
+
+    async function loadUsers() {
+      try {
+        const { users } = await api('/users');
+        renderPending(users.filter(u => u.statut === 'en_attente'));
+        renderTable(users);
+      } catch (err) {
+        document.getElementById('pending-list').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderPending(pending) {
+      const container = document.getElementById('pending-list');
+      if (pending.length === 0) {
+        container.innerHTML = '<div class="empty-state">Aucune demande en attente.</div>';
+        return;
+      }
+      container.innerHTML = pending.map(u => `
+        <div class="card" style="margin-bottom:12px">
+          <div class="flex-between" style="flex-wrap:wrap; gap:14px">
+            <div>
+              <strong>${escapeHtml(u.username)}</strong>
+              <p class="muted mb-0" style="font-size:0.82rem">${escapeHtml(u.nom_complet || 'Sans nom')} · demandé le ${formatDate(u.created_at)}</p>
+            </div>
+            <div class="flex gap-8" style="align-items:center; flex-wrap:wrap">
+              ${gradeSelectHtml('')}
+              ${rangSelectHtml('')}
+              <button class="btn btn-primary btn-sm" data-approve="${u.id}">Valider</button>
+              <button class="btn btn-danger btn-sm" data-reject="${u.id}">Refuser</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('[data-approve]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('.card');
+          const gradeSelect = card.querySelector('.grade-select');
+          const rangSelect = card.querySelector('.rang-select');
+          if (!gradeSelect.value) { toast('Choisissez un grade avant de valider.', 'error'); return; }
+          try {
+            await api(`/users/${btn.dataset.approve}/approve`, {
+              method: 'POST',
+              body: { grade_id: gradeSelect.value, rang_ninja: rangSelect.value || null },
+            });
+            toast('Compte validé.');
+            loadUsers();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      container.querySelectorAll('[data-reject]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Refuser cette demande de compte ?')) return;
+          try {
+            await api(`/users/${btn.dataset.reject}/reject`, { method: 'POST' });
+            toast('Demande refusée.');
+            loadUsers();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+
+    function renderTable(users) {
+      const tbody = document.querySelector('#users-table tbody');
+      const approved = users.filter(u => u.statut !== 'en_attente');
+      if (approved.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Aucun compte.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = approved.map(u => {
+        const [label, cls] = statutLabels[u.statut] || ['—', 'badge-muted'];
+        return `
+          <tr>
+            <td>${escapeHtml(u.username)}</td>
+            <td>${escapeHtml(u.nom_complet || '—')}</td>
+            <td>${gradeSelectHtml(u.grade_id)}</td>
+            <td>${rangSelectHtml(u.rang_ninja || '')}</td>
+            <td><span class="badge ${cls}">${label}</span></td>
+            <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
+            <td><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></td>
+          </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.grade-select').forEach((select, idx) => {
+        select.addEventListener('change', async () => {
+          try {
+            await api(`/users/${approved[idx].id}/grade`, { method: 'PATCH', body: { grade_id: select.value || null } });
+            toast('Grade mis à jour.');
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      tbody.querySelectorAll('.rang-select').forEach((select, idx) => {
+        select.addEventListener('change', async () => {
+          try {
+            await api(`/users/${approved[idx].id}/rang`, { method: 'PATCH', body: { rang_ninja: select.value || '' } });
+            toast('Rang ninja mis à jour.');
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      tbody.querySelectorAll('[data-delete]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Supprimer définitivement ce compte ?')) return;
+          try {
+            await api(`/users/${btn.dataset.delete}`, { method: 'DELETE' });
+            toast('Compte supprimé.');
+            loadUsers();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+  </script>
+</body>
+</html>

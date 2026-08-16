@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demande d'accès — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="center-page">
+    <div class="doc-card" style="max-width:440px; width:100%;">
+      <div class="text-center" style="margin-bottom:20px">
+        <div class="sceau" style="margin:0 auto 12px"></div>
+        <h2 class="mb-0">Demande d'accès</h2>
+        <p class="field-hint">Votre compte devra être validé par un haut gradé avant de pouvoir vous connecter.</p>
+      </div>
+
+      <div id="form-error"></div>
+      <div id="form-success" class="hidden">
+        <div class="alert alert-info">Demande envoyée avec succès. Un haut gradé doit valider votre compte et vous attribuer un grade avant que vous puissiez vous connecter.</div>
+        <a href="login.html" class="btn btn-primary btn-block">Retour à la connexion</a>
+      </div>
+
+      <form id="register-form">
+        <div class="field">
+          <label for="nom_complet">Nom du personnage</label>
+          <input type="text" id="nom_complet" name="nom_complet" placeholder="Ex : Baki" />
+        </div>
+        <div class="field">
+          <label for="username">Nom d'utilisateur</label>
+          <input type="text" id="username" name="username" minlength="3" maxlength="40" required />
+        </div>
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input type="password" id="password" name="password" minlength="6" required />
+          <div class="field-hint">6 caractères minimum.</div>
+        </div>
+        <div class="field">
+          <label for="password2">Confirmer le mot de passe</label>
+          <input type="password" id="password2" name="password2" minlength="6" required />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="submit-btn">Envoyer la demande</button>
+      </form>
+
+      <p class="text-center" style="margin-top:18px; font-size:0.85rem">
+        Déjà un compte ? <a href="login.html">Se connecter</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('form-error');
+      const submitBtn = document.getElementById('submit-btn');
+      errorBox.innerHTML = '';
+
+      const password = document.getElementById('password').value;
+      const password2 = document.getElementById('password2').value;
+      if (password !== password2) {
+        errorBox.innerHTML = '<div class="alert alert-error">Les mots de passe ne correspondent pas.</div>';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Envoi…';
+      try {
+        await api('/auth/register', {
+          method: 'POST',
+          body: {
+            username: document.getElementById('username').value.trim(),
+            password,
+            nom_complet: document.getElementById('nom_complet').value.trim(),
+          },
+        });
+        document.getElementById('register-form').classList.add('hidden');
+        document.getElementById('form-success').classList.remove('hidden');
+      } catch (err) {
+        errorBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Envoyer la demande';
+      }
+    });
+  </script>
+</body>
+</html>

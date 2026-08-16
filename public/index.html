@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Police de Sunagakure — Registre officiel</title>
+  <meta name="description" content="Site officiel de la Force de Police du Village Caché du Sable." />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <header class="hero">
+      <div class="wrap">
+        <div class="sceau"></div>
+        <div class="tagline">Village Caché du Sable</div>
+        <h1>Force de Police de Sunagakure</h1>
+        <p class="lead">Registre officiel des forces de l'ordre : organisation, sanctions en vigueur et casiers judiciaires du village. Fait respecter la loi du Kazekage.</p>
+        <div class="hero-actions">
+          <a href="organigramme.html" class="btn btn-primary">Voir l'organigramme</a>
+          <a href="register.html" class="btn btn-secondary">Demander un accès</a>
+        </div>
+
+        <div class="stat-row" id="stat-row">
+          <div class="stat-box"><span class="n">—</span><span class="l">Agents actifs</span></div>
+          <div class="stat-box"><span class="n">—</span><span class="l">Casiers ouverts</span></div>
+          <div class="stat-box"><span class="n">—</span><span class="l">Types de sanctions</span></div>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="mb-0">Communiqués officiels</h2>
+        </div>
+        <div id="actus-list" class="grid grid-2">
+          <div class="loader">Chargement des communiqués…</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      await initLayout({ activeKey: 'accueil' });
+      loadStats();
+      loadActus();
+    })();
+
+    async function loadStats() {
+      try {
+        const [org, sanc] = await Promise.allSettled([
+          api('/grades/organigramme'),
+          CURRENT_USER ? api('/sanctions') : Promise.resolve({ sanctions: [] }),
+        ]);
+        const boxes = document.querySelectorAll('#stat-row .n');
+        if (org.status === 'fulfilled') {
+          const totalMembres = org.value.organigramme.reduce((acc, g) => acc + g.membres.length, 0);
+          boxes[0].textContent = totalMembres;
+        }
+        if (sanc.status === 'fulfilled') {
+          boxes[2].textContent = sanc.value.sanctions.length || '—';
+        }
+      } catch (_) { /* silencieux : stats non critiques */ }
+    }
+
+    async function loadActus() {
+      const container = document.getElementById('actus-list');
+      try {
+        const { actus } = await api('/actus?limit=6');
+        if (actus.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun communiqué pour le moment.</div>';
+          return;
+        }
+        container.innerHTML = actus.map((a) => `
+          <article class="card actu-card">
+            ${a.epingle ? '<span class="badge badge-warn">Épinglé</span>' : ''}
+            <h3>${escapeHtml(a.titre)}</h3>
+            <div class="date">${formatDateTime(a.created_at)} · ${escapeHtml(a.auteur_username || 'Registre')}</div>
+            <p>${escapeHtml(a.contenu)}</p>
+          </article>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

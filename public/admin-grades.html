@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion des grades — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Gestion des grades</h1>
+          <p class="muted">Créez ou modifiez la hiérarchie et les permissions de chaque grade.</p>
+        </div>
+        <button class="btn btn-primary" id="new-grade-btn">+ Nouveau grade</button>
+      </div>
+
+      <div id="grades-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="grade-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouveau grade</h3>
+      <form id="grade-form">
+        <input type="hidden" id="g-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="g-nom">Nom du grade *</label>
+            <input type="text" id="g-nom" required />
+          </div>
+          <div class="field">
+            <label for="g-niveau">Niveau hiérarchique</label>
+            <input type="number" id="g-niveau" value="0" />
+            <div class="field-hint">Plus le nombre est élevé, plus le grade est haut placé.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="g-couleur">Couleur du badge</label>
+          <input type="color" id="g-couleur" value="#C9A227" style="height:42px; padding:4px" />
+        </div>
+        <div class="field">
+          <label>Permissions</label>
+          <div class="field-hint" style="margin-bottom:8px">Ce que les membres de ce grade peuvent faire sur le site.</div>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
+            <input type="checkbox" id="p-valider" style="width:auto"> Valider les comptes et attribuer des grades
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
+            <input type="checkbox" id="p-grades" style="width:auto"> Gérer les grades (créer/modifier/supprimer)
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
+            <input type="checkbox" id="p-sanctions" style="width:auto"> Gérer le barème des sanctions
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
+            <input type="checkbox" id="p-casiers" style="width:auto"> Gérer les casiers judiciaires
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
+            <input type="checkbox" id="p-actus" style="width:auto"> Publier des communiqués
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+            <input type="checkbox" id="p-protocoles" style="width:auto"> Gérer les codes d'alerte (protocoles)
+          </label>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'admin-grades', requireAuth: true, requirePerm: 'peut_gerer_grades' });
+      if (!user) return;
+      loadGrades();
+      document.getElementById('new-grade-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('grade-modal').classList.remove('open'));
+      document.getElementById('grade-form').addEventListener('submit', saveGrade);
+    })();
+
+    let gradesCache = [];
+
+    async function loadGrades() {
+      const container = document.getElementById('grades-list');
+      try {
+        const { grades } = await api('/grades');
+        gradesCache = grades;
+        if (grades.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun grade défini.</div>';
+          return;
+        }
+        container.innerHTML = grades.map(g => `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="flex-wrap:wrap; gap:12px">
+              <div class="flex gap-12" style="align-items:center">
+                <span class="grade-dot" style="background:${g.couleur}; width:16px; height:16px"></span>
+                <div>
+                  <strong>${escapeHtml(g.nom)}</strong>
+                  <p class="muted mb-0" style="font-size:0.8rem">Niveau ${g.niveau} · ${permSummary(g)}</p>
+                </div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${g.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${g.id}">Supprimer</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openModal(gradesCache.find(g => g.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce grade ? Les membres concernés perdront ce grade.')) return;
+            try {
+              await api(`/grades/${btn.dataset.delete}`, { method: 'DELETE' });
+              toast('Grade supprimé.');
+              loadGrades();
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function permSummary(g) {
+      const perms = [];
+      if (g.peut_valider_comptes) perms.push('Validation comptes');
+      if (g.peut_gerer_grades) perms.push('Gestion grades');
+      if (g.peut_gerer_sanctions) perms.push('Gestion sanctions');
+      if (g.peut_gerer_casiers) perms.push('Gestion casiers');
+      if (g.peut_gerer_actus) perms.push('Communiqués');
+      if (g.peut_gerer_protocoles) perms.push('Protocoles');
+      return perms.length ? perms.join(', ') : 'Aucune permission spéciale';
+    }
+
+    function openModal(grade = null) {
+      document.getElementById('grade-form').reset();
+      document.getElementById('g-couleur').value = '#C9A227';
+      if (grade) {
+        document.getElementById('modal-title').textContent = 'Modifier le grade';
+        document.getElementById('g-id').value = grade.id;
+        document.getElementById('g-nom').value = grade.nom;
+        document.getElementById('g-niveau').value = grade.niveau;
+        document.getElementById('g-couleur').value = grade.couleur;
+        document.getElementById('p-valider').checked = grade.peut_valider_comptes;
+        document.getElementById('p-grades').checked = grade.peut_gerer_grades;
+        document.getElementById('p-sanctions').checked = grade.peut_gerer_sanctions;
+        document.getElementById('p-casiers').checked = grade.peut_gerer_casiers;
+        document.getElementById('p-actus').checked = grade.peut_gerer_actus;
+        document.getElementById('p-protocoles').checked = grade.peut_gerer_protocoles;
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau grade';
+        document.getElementById('g-id').value = '';
+      }
+      document.getElementById('grade-modal').classList.add('open');
+    }
+
+    async function saveGrade(e) {
+      e.preventDefault();
+      const id = document.getElementById('g-id').value;
+      const payload = {
+        nom: document.getElementById('g-nom').value.trim(),
+        niveau: parseInt(document.getElementById('g-niveau').value) || 0,
+        couleur: document.getElementById('g-couleur').value,
+        peut_valider_comptes: document.getElementById('p-valider').checked,
+        peut_gerer_grades: document.getElementById('p-grades').checked,
+        peut_gerer_sanctions: document.getElementById('p-sanctions').checked,
+        peut_gerer_casiers: document.getElementById('p-casiers').checked,
+        peut_gerer_actus: document.getElementById('p-actus').checked,
+        peut_gerer_protocoles: document.getElementById('p-protocoles').checked,
+      };
+      try {
+        if (id) {
+          await api(`/grades/${id}`, { method: 'PUT', body: payload });
+          toast('Grade mis à jour.');
+        } else {
+          await api('/grades', { method: 'POST', body: payload });
+          toast('Grade créé.');
+        }
+        document.getElementById('grade-modal').classList.remove('open');
+        loadGrades();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tableau de bord — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 id="welcome-title" class="mb-0">Bienvenue</h1>
+          <p class="muted" id="welcome-sub"></p>
+        </div>
+      </div>
+
+      <div id="pending-alert"></div>
+
+      <div class="grid grid-3" id="quick-links"></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'dashboard', requireAuth: true });
+      if (!user) return;
+
+      document.getElementById('welcome-title').textContent = `Bienvenue, ${user.nom_complet || user.username}`;
+      document.getElementById('welcome-sub').textContent =
+        `${user.grade_nom || 'Sans grade'} · Matricule ${user.matricule || '—'}`;
+
+      const links = [
+        { href: 'casiers.html', title: 'Casiers judiciaires', desc: 'Consulter et gérer les dossiers des suspects.', show: true },
+        { href: 'organigramme.html', title: 'Organigramme', desc: 'Hiérarchie complète des forces de police.', show: true },
+        { href: 'profil.html', title: 'Mon profil', desc: 'Modifier votre mot de passe.', show: true },
+        { href: 'admin-comptes.html', title: 'Gestion des comptes', desc: 'Valider les demandes et attribuer les grades.', show: user.permissions.peut_valider_comptes },
+        { href: 'admin-grades.html', title: 'Gestion des grades', desc: 'Créer, modifier ou supprimer des grades.', show: user.permissions.peut_gerer_grades },
+        { href: 'code-penal.html', title: 'Code pénal', desc: 'Modifier les articles, blâmes et paliers de récidive.', show: user.permissions.peut_gerer_sanctions },
+        { href: 'protocoles.html', title: 'Protocoles', desc: "Modifier les codes d'alerte.", show: user.permissions.peut_gerer_protocoles },
+        { href: 'admin-actus.html', title: 'Communiqués', desc: 'Publier des actualités officielles.', show: user.permissions.peut_gerer_actus },
+      ];
+
+      document.getElementById('quick-links').innerHTML = links.filter(l => l.show).map(l => `
+        <a href="${l.href}" class="card" style="display:block">
+          <h3 style="font-size:1.05rem; margin-bottom:8px">${escapeHtml(l.title)}</h3>
+          <p class="muted mb-0" style="font-size:0.86rem">${escapeHtml(l.desc)}</p>
+        </a>
+      `).join('');
+
+      if (user.permissions.peut_valider_comptes) {
+        try {
+          const { users } = await api('/users');
+          const pending = users.filter(u => u.statut === 'en_attente');
+          if (pending.length > 0) {
+            document.getElementById('pending-alert').innerHTML = `
+              <div class="alert alert-info">
+                ${pending.length} demande(s) de compte en attente de validation.
+                <a href="admin-comptes.html">Traiter les demandes →</a>
+              </div>`;
+          }
+        } catch (_) { /* silencieux */ }
+      }
+    })();
+  </script>
+</body>
+</html>

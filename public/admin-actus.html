@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Communiqués — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Communiqués officiels</h1>
+          <p class="muted">Publiez des actualités visibles sur la page d'accueil.</p>
+        </div>
+        <button class="btn btn-primary" id="new-actu-btn">+ Nouveau communiqué</button>
+      </div>
+      <div id="actus-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="actu-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouveau communiqué</h3>
+      <form id="actu-form">
+        <input type="hidden" id="a-id" />
+        <div class="field">
+          <label for="a-titre">Titre *</label>
+          <input type="text" id="a-titre" required />
+        </div>
+        <div class="field">
+          <label for="a-contenu">Contenu *</label>
+          <textarea id="a-contenu" rows="5" required></textarea>
+        </div>
+        <div class="field">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+            <input type="checkbox" id="a-epingle" style="width:auto"> Épingler en haut de la page d'accueil
+          </label>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Publier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'admin-actus', requireAuth: true, requirePerm: 'peut_gerer_actus' });
+      if (!user) return;
+      loadActus();
+      document.getElementById('new-actu-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('actu-modal').classList.remove('open'));
+      document.getElementById('actu-form').addEventListener('submit', saveActu);
+    })();
+
+    let actusCache = [];
+
+    async function loadActus() {
+      const container = document.getElementById('actus-list');
+      try {
+        const { actus } = await api('/actus?limit=50');
+        actusCache = actus;
+        if (actus.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun communiqué publié.</div>';
+          return;
+        }
+        container.innerHTML = actus.map(a => `
+          <div class="card actu-card" style="margin-bottom:12px">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:12px">
+              <div>
+                ${a.epingle ? '<span class="badge badge-warn">Épinglé</span>' : ''}
+                <h3>${escapeHtml(a.titre)}</h3>
+                <div class="date">${formatDateTime(a.created_at)}</div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${a.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${a.id}">Supprimer</button>
+              </div>
+            </div>
+            <p style="margin-top:10px">${escapeHtml(a.contenu)}</p>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openModal(actusCache.find(a => a.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce communiqué ?')) return;
+            try {
+              await api(`/actus/${btn.dataset.delete}`, { method: 'DELETE' });
+              toast('Communiqué supprimé.');
+              loadActus();
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(actu = null) {
+      document.getElementById('actu-form').reset();
+      if (actu) {
+        document.getElementById('modal-title').textContent = 'Modifier le communiqué';
+        document.getElementById('a-id').value = actu.id;
+        document.getElementById('a-titre').value = actu.titre;
+        document.getElementById('a-contenu').value = actu.contenu;
+        document.getElementById('a-epingle').checked = actu.epingle;
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau communiqué';
+        document.getElementById('a-id').value = '';
+      }
+      document.getElementById('actu-modal').classList.add('open');
+    }
+
+    async function saveActu(e) {
+      e.preventDefault();
+      const id = document.getElementById('a-id').value;
+      const payload = {
+        titre: document.getElementById('a-titre').value.trim(),
+        contenu: document.getElementById('a-contenu').value.trim(),
+        epingle: document.getElementById('a-epingle').checked,
+      };
+      try {
+        if (id) {
+          await api(`/actus/${id}`, { method: 'PUT', body: payload });
+          toast('Communiqué mis à jour.');
+        } else {
+          await api('/actus', { method: 'POST', body: payload });
+          toast('Communiqué publié.');
+        }
+        document.getElementById('actu-modal').classList.remove('open');
+        loadActus();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>
