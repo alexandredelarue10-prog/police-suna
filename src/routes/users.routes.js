@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { logActivity } = require('../utils/activityLog');
 
 const router = express.Router();
 
@@ -12,6 +13,17 @@ async function assertGradeAssignable(gradeId) {
   if (rows[0].reserve) return { ok: false, error: 'Ce grade est réservé et ne peut être attribué à personne.' };
   return { ok: true };
 }
+
+// GET /api/users/pending-count — compteur léger pour la pastille de notification dans la nav
+router.get('/pending-count', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM users WHERE statut = 'en_attente'");
+    res.json({ count: rows[0].n });
+  } catch (err) {
+    console.error('[users/pending-count]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
 
 // GET /api/users — liste de tous les comptes (hauts gradés uniquement)
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
@@ -53,6 +65,8 @@ router.post('/:id/approve', requireAuth, requirePermission('peut_valider_comptes
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
 
+    await logActivity(req.session.user.id, req.session.user.username, 'compte_valide', `${rows[0].username} validé`);
+
     res.json({ message: `Compte ${rows[0].username} validé.` });
   } catch (err) {
     console.error('[users/approve]', err);
@@ -68,6 +82,7 @@ router.post('/:id/reject', requireAuth, requirePermission('peut_valider_comptes'
       [req.session.user.id, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    await logActivity(req.session.user.id, req.session.user.username, 'compte_refuse', `${rows[0].username} refusé`);
     res.json({ message: `Demande de ${rows[0].username} refusée.` });
   } catch (err) {
     console.error('[users/reject]', err);
@@ -101,6 +116,7 @@ router.patch('/:id/grade', requireAuth, requirePermission('peut_valider_comptes'
       `UPDATE users SET grade_id = $1 WHERE id = $2 RETURNING id, username`,
       [grade_id || null, targetId]
     );
+    await logActivity(req.session.user.id, req.session.user.username, 'grade_modifie', `Grade de ${rows[0].username} modifié`);
     res.json({ message: `Grade de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/grade]', err);
@@ -128,6 +144,7 @@ router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes')
       `UPDATE users SET rang_id = $1, brigade = $2 WHERE id = $3 RETURNING id, username`,
       [rang_id || null, brigade !== undefined ? brigade : '', targetId]
     );
+    await logActivity(req.session.user.id, req.session.user.username, 'rang_modifie', `Rang de ${rows[0].username} modifié`);
     res.json({ message: `Rang de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/rang]', err);
@@ -151,6 +168,7 @@ router.delete('/:id', requireAuth, requirePermission('peut_valider_comptes'), as
     }
 
     const { rows } = await pool.query('DELETE FROM users WHERE id = $1 RETURNING username', [targetId]);
+    await logActivity(req.session.user.id, req.session.user.username, 'compte_supprime', `${rows[0].username} supprimé`);
     res.json({ message: `Compte ${rows[0].username} supprimé.` });
   } catch (err) {
     console.error('[users/delete]', err);

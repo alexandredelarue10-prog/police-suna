@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { logActivity } = require('../utils/activityLog');
 
 const router = express.Router();
 
@@ -58,6 +59,7 @@ router.post('/', requireAuth, requirePermission('peut_gerer_grades'), async (req
         !!reserve,
       ]
     );
+    await logActivity(req.session.user.id, req.session.user.username, 'grade_cree', `Grade "${rows[0].nom}" créé`);
     res.status(201).json({ grade: rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Un grade avec ce nom existe déjà.' });
@@ -95,6 +97,7 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_grades'), async (r
       ]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Grade introuvable.' });
+    await logActivity(req.session.user.id, req.session.user.username, 'grade_edite', `Grade "${rows[0].nom}" édité`);
     res.json({ grade: rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Un grade avec ce nom existe déjà.' });
@@ -114,6 +117,7 @@ router.delete('/:id', requireAuth, requirePermission('peut_gerer_grades'), async
 
     const { rows } = await pool.query('DELETE FROM grades WHERE id = $1 RETURNING nom', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Grade introuvable.' });
+    await logActivity(req.session.user.id, req.session.user.username, 'grade_supprime', `Grade "${rows[0].nom}" supprimé`);
     res.json({ message: `Grade "${rows[0].nom}" supprimé.` });
   } catch (err) {
     console.error('[grades/delete]', err);

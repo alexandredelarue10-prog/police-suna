@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planning — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Planning de service</h1>
+          <p class="muted">Patrouilles et services à venir.</p>
+        </div>
+        <button class="btn btn-primary hidden" id="new-btn">+ Planifier un service</button>
+      </div>
+      <div id="planning-content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="patrol-modal">
+    <div class="modal">
+      <h3>Planifier un service</h3>
+      <form id="patrol-form">
+        <div class="field">
+          <label for="p-titre">Titre *</label>
+          <input type="text" id="p-titre" placeholder="Ex : Patrouille marché central" required />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="p-date">Date *</label>
+            <input type="date" id="p-date" required />
+          </div>
+          <div class="field">
+            <label for="p-debut">Heure début</label>
+            <input type="text" id="p-debut" placeholder="Ex : 08h00" />
+          </div>
+          <div class="field">
+            <label for="p-fin">Heure fin</label>
+            <input type="text" id="p-fin" placeholder="Ex : 12h00" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-agent">Agent assigné</label>
+          <select id="p-agent"><option value="">— Non assigné —</option></select>
+        </div>
+        <div class="field">
+          <label for="p-notes">Notes</label>
+          <textarea id="p-notes" rows="2"></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Planifier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user;
+    (async function () {
+      user = await initLayout({ activeKey: 'planning', requireAuth: true });
+      if (!user) return;
+      if (user.permissions.peut_valider_comptes) {
+        document.getElementById('new-btn').classList.remove('hidden');
+        try {
+          const { users } = await api('/users');
+          const select = document.getElementById('p-agent');
+          users.filter(u => u.statut === 'approuve').forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.nom_complet || u.username;
+            select.appendChild(opt);
+          });
+        } catch (_) { /* silencieux */ }
+      }
+      document.getElementById('new-btn').addEventListener('click', () => {
+        document.getElementById('patrol-form').reset();
+        document.getElementById('patrol-modal').classList.add('open');
+      });
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('patrol-modal').classList.remove('open'));
+      document.getElementById('patrol-form').addEventListener('submit', savePatrol);
+      loadPlanning();
+    })();
+
+    async function loadPlanning() {
+      const container = document.getElementById('planning-content');
+      try {
+        const { patrouilles } = await api('/patrouilles');
+        if (patrouilles.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun service planifié pour le moment.</div>';
+          return;
+        }
+        const byDate = {};
+        patrouilles.forEach(p => { (byDate[p.date_service] = byDate[p.date_service] || []).push(p); });
+
+        container.innerHTML = Object.entries(byDate).map(([date, items]) => `
+          <div style="margin-bottom:22px">
+            <h3 style="font-size:0.95rem; color:var(--or-300)">${formatDate(date)}</h3>
+            ${items.map(p => `
+              <div class="card" style="margin-bottom:8px; padding:14px 18px">
+                <div class="flex-between">
+                  <div>
+                    <strong>${escapeHtml(p.titre)}</strong>
+                    <p class="muted mb-0" style="font-size:0.82rem">
+                      ${p.heure_debut || '—'}${p.heure_fin ? ' – ' + p.heure_fin : ''}
+                      ${p.agent_nom || p.agent_username ? ' · ' + escapeHtml(p.agent_nom || p.agent_username) : ' · Non assigné'}
+                    </p>
+                    ${p.notes ? `<p class="mb-0" style="font-size:0.82rem">${escapeHtml(p.notes)}</p>` : ''}
+                  </div>
+                  ${user.permissions.peut_valider_comptes ? `<button class="btn btn-danger btn-sm" data-delete="${p.id}">Suppr.</button>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Annuler ce service ?')) return;
+            try { await api(`/patrouilles/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Service annulé.'); loadPlanning(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function savePatrol(e) {
+      e.preventDefault();
+      const payload = {
+        titre: document.getElementById('p-titre').value.trim(),
+        date_service: document.getElementById('p-date').value,
+        heure_debut: document.getElementById('p-debut').value.trim(),
+        heure_fin: document.getElementById('p-fin').value.trim(),
+        agent_id: document.getElementById('p-agent').value || null,
+        notes: document.getElementById('p-notes').value.trim(),
+      };
+      try {
+        await api('/patrouilles', { method: 'POST', body: payload });
+        toast('Service planifié.');
+        document.getElementById('patrol-modal').classList.remove('open');
+        loadPlanning();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  </script>
+</body>
+</html>

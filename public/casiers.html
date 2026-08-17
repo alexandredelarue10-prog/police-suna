@@ -17,8 +17,31 @@
         <button class="btn btn-primary" id="new-casier-btn">+ Nouveau casier</button>
       </div>
 
-      <div class="field" style="max-width:360px; margin-bottom:24px">
-        <input type="text" id="search-input" placeholder="Rechercher un nom, prénom ou surnom…" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+      <div class="field-row" style="max-width:680px; margin-bottom:24px; flex-wrap:wrap">
+        <div class="field" style="min-width:220px">
+          <input type="text" id="search-input" placeholder="Rechercher un nom, prénom ou surnom…" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+        </div>
+        <div class="field" style="max-width:170px">
+          <select id="filter-statut" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)">
+            <option value="">Tous les statuts</option>
+            <option value="libre">Libre</option>
+            <option value="recherche">Recherché</option>
+            <option value="detention">En détention</option>
+            <option value="liberation_conditionnelle">Libération conditionnelle</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:170px">
+          <select id="filter-danger" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)">
+            <option value="0">Danger : tous</option>
+            <option value="2">Danger 2+</option>
+            <option value="3">Danger 3+</option>
+            <option value="4">Danger 4+</option>
+            <option value="5">Danger 5</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:170px">
+          <input type="text" id="filter-village" placeholder="Village" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+        </div>
       </div>
 
       <div id="casiers-grid" class="grid grid-3">
@@ -114,10 +137,14 @@
       }
 
       let searchTimer;
-      document.getElementById('search-input').addEventListener('input', (e) => {
+      const triggerReload = () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => loadCasiers(e.target.value), 300);
-      });
+        searchTimer = setTimeout(() => loadCasiers(), 250);
+      };
+      document.getElementById('search-input').addEventListener('input', triggerReload);
+      document.getElementById('filter-statut').addEventListener('change', triggerReload);
+      document.getElementById('filter-danger').addEventListener('change', triggerReload);
+      document.getElementById('filter-village').addEventListener('input', triggerReload);
     })();
 
     const statutLabels = {
@@ -127,10 +154,19 @@
       liberation_conditionnelle: ['Libération conditionnelle', 'badge-muted'],
     };
 
-    async function loadCasiers(q = '') {
+    async function loadCasiers() {
       const grid = document.getElementById('casiers-grid');
+      const q = document.getElementById('search-input').value;
+      const statut = document.getElementById('filter-statut').value;
+      const dangerMin = document.getElementById('filter-danger').value;
+      const village = document.getElementById('filter-village').value;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (statut) params.set('statut', statut);
+      if (dangerMin && dangerMin !== '0') params.set('danger_min', dangerMin);
+      if (village) params.set('village', village);
       try {
-        const { casiers } = await api('/casiers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+        const { casiers } = await api('/casiers' + (params.toString() ? `?${params}` : ''));
         if (casiers.length === 0) {
           grid.innerHTML = '<div class="empty-state">Aucun casier trouvé.</div>';
           return;
@@ -201,7 +237,7 @@
           toast('Casier créé.');
         }
         closeModal();
-        loadCasiers(document.getElementById('search-input').value);
+        loadCasiers();
       } catch (err) {
         toast(err.message, 'error');
       }

@@ -28,6 +28,17 @@
       </div>
     </header>
 
+    <div id="alert-banner"></div>
+
+    <section id="recherches-section" class="hidden">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="mb-0">Avis de recherche</h2>
+        </div>
+        <div id="recherches-list" class="grid grid-3"></div>
+      </div>
+    </section>
+
     <section>
       <div class="wrap">
         <div class="section-head">
@@ -47,7 +58,43 @@
       await initLayout({ activeKey: 'accueil' });
       loadStats();
       loadActus();
+      loadAlertBanner();
+      loadRecherches();
     })();
+
+    async function loadAlertBanner() {
+      try {
+        const { alertes } = await api('/alertes');
+        const actif = alertes.find(a => a.actif);
+        if (!actif) return;
+        document.getElementById('alert-banner').innerHTML = `
+          <div class="wrap" style="padding-top:20px">
+            <div class="alert" style="border-left:5px solid ${actif.couleur}; background:rgba(0,0,0,0.2); display:flex; align-items:center; gap:12px">
+              <span class="grade-dot" style="background:${actif.couleur}; width:14px; height:14px"></span>
+              <div>
+                <strong>Code ${escapeHtml(actif.nom)} actif</strong> — ${escapeHtml(actif.description_courte || '')}
+                <a href="protocoles.html" style="margin-left:8px">Voir le protocole →</a>
+              </div>
+            </div>
+          </div>`;
+      } catch (_) { /* silencieux */ }
+    }
+
+    async function loadRecherches() {
+      try {
+        const { recherches } = await api('/casiers/recherches');
+        if (recherches.length === 0) return;
+        document.getElementById('recherches-section').classList.remove('hidden');
+        document.getElementById('recherches-list').innerHTML = recherches.map(c => `
+          <div class="dossier" data-tab="Recherché" style="border-left-color:var(--sceau-600)">
+            <span class="badge badge-danger">Danger ${c.niveau_danger}/5</span>
+            <h3>${escapeHtml(c.nom)} ${escapeHtml(c.prenom || '')}</h3>
+            ${c.surnom ? `<div class="meta">dit "${escapeHtml(c.surnom)}"</div>` : ''}
+            <div class="meta">${escapeHtml(c.village || 'Village inconnu')}</div>
+          </div>
+        `).join('');
+      } catch (_) { /* silencieux — public, pas grave si indisponible */ }
+    }
 
     async function loadStats() {
       try {

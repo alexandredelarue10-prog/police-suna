@@ -116,9 +116,11 @@
               <div class="flex gap-12" style="align-items:center">
                 <span class="alerte-dot" style="background:${a.couleur}"></span>
                 <span class="alerte-name" style="color:${a.couleur}">Code ${escapeHtml(a.nom)}</span>
+                ${a.actif ? '<span class="badge badge-ok">Actif actuellement</span>' : ''}
                 <span class="muted" style="font-size:0.85rem">— ${escapeHtml(a.description_courte || '')}</span>
               </div>
               <div class="flex gap-8" style="align-items:center">
+                ${canManage && !a.actif ? `<button class="btn btn-primary btn-sm" data-activate="${a.id}" onclick="event.stopPropagation()">Activer</button>` : ''}
                 ${canManage ? `<button class="btn btn-secondary btn-sm" data-edit="${a.id}" onclick="event.stopPropagation()">Modifier</button>
                 <button class="btn btn-danger btn-sm" data-delete="${a.id}" onclick="event.stopPropagation()">Suppr.</button>` : ''}
                 <span class="alerte-arrow" id="arrow-${idx}">▸</span>
@@ -157,6 +159,12 @@
           });
         });
         if (canManage) {
+          container.querySelectorAll('[data-activate]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              try { await api(`/alertes/${btn.dataset.activate}/activer`, { method: 'POST' }); toast('Code activé.'); loadAlertes(canManage); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
           container.querySelectorAll('[data-edit]').forEach(btn => {
             btn.addEventListener('click', () => openModal(alertesCache.find(a => a.id == btn.dataset.edit)));
           });

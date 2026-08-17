@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Journal d'activité — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <h1>Journal d'activité</h1>
+      <p class="muted" style="margin-bottom:28px">Historique des actions administratives récentes (validations, modifications de grade, casiers, code pénal…).</p>
+      <div id="journal-content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'journal', requireAuth: true, requirePerm: 'peut_valider_comptes' });
+      if (!user) return;
+      loadJournal();
+    })();
+
+    async function loadJournal() {
+      const container = document.getElementById('journal-content');
+      try {
+        const { entries } = await api('/journal?limit=150');
+        if (entries.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucune activité enregistrée pour le moment.</div>';
+          return;
+        }
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Auteur</th><th>Action</th><th>Détail</th></tr></thead>
+              <tbody>
+                ${entries.map(e => `
+                  <tr>
+                    <td style="font-family:var(--font-mono); font-size:0.78rem; white-space:nowrap">${formatDateTime(e.created_at)}</td>
+                    <td>${escapeHtml(e.username_snapshot || '—')}</td>
+                    <td><span class="badge badge-muted">${escapeHtml(e.action_label)}</span></td>
+                    <td style="font-size:0.85rem">${escapeHtml(e.details || '')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

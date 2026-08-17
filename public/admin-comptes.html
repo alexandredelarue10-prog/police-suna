@@ -31,6 +31,27 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="dossier-modal">
+    <div class="modal">
+      <h3>Dossier disciplinaire — <span id="dossier-username"></span></h3>
+      <div id="dossier-list" style="margin-bottom:18px"></div>
+      <form id="dossier-form" class="dark-form" style="background:rgba(0,0,0,0.03); padding:14px; border-radius:4px">
+        <div class="field">
+          <label for="d-niveau">Appliquer un nouveau blâme</label>
+          <select id="d-niveau"></select>
+        </div>
+        <div class="field">
+          <label for="d-motif">Motif</label>
+          <input type="text" id="d-motif" placeholder="Raison du blâme" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Appliquer</button>
+      </form>
+      <div class="modal-close-row">
+        <button type="button" class="btn btn-secondary" id="dossier-close">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/api.js"></script>
   <script src="js/common.js"></script>
   <script>
@@ -46,6 +67,22 @@
       gradesCache = grades;
       rangsCache = rangs;
       loadUsers();
+
+      document.getElementById('dossier-close').addEventListener('click', () => document.getElementById('dossier-modal').classList.remove('open'));
+      document.getElementById('dossier-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById('dossier-modal').dataset.userId;
+        try {
+          await api(`/users/${userId}/blames`, {
+            method: 'POST',
+            body: { blame_niveau: parseInt(document.getElementById('d-niveau').value), motif: document.getElementById('d-motif').value.trim() },
+          });
+          toast('Blâme appliqué.');
+          document.getElementById('d-motif').value = '';
+          const { blames } = await api(`/users/${userId}/blames`);
+          renderDossier(blames);
+        } catch (err) { toast(err.message, 'error'); }
+      });
     })();
 
     const statutLabels = {
@@ -150,7 +187,7 @@
             <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.rang_nom || '—')} 🔒</span>` : rangSelectHtml(u.rang_id)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
-            <td>${u.protege ? '' : `<button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button>`}</td>
+            <td>${u.protege ? '' : `<div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-dossier="${u.id}" data-username="${escapeHtml(u.username)}">Dossier</button><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></div>`}</td>
           </tr>`;
       }).join('');
 
@@ -181,6 +218,60 @@
             await api(`/users/${btn.dataset.delete}`, { method: 'DELETE' });
             toast('Compte supprimé.');
             loadUsers();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      tbody.querySelectorAll('[data-dossier]').forEach(btn => {
+        btn.addEventListener('click', () => openDossier(btn.dataset.dossier, btn.dataset.username));
+      });
+    }
+
+    let blameTypesCache = [];
+    async function openDossier(userId, username) {
+      document.getElementById('dossier-username').textContent = username;
+      document.getElementById('dossier-modal').dataset.userId = userId;
+      document.getElementById('dossier-list').innerHTML = '<div class="loader">Chargement…</div>';
+      document.getElementById('dossier-modal').classList.add('open');
+
+      if (blameTypesCache.length === 0) {
+        try { blameTypesCache = (await api('/blames')).blames; } catch (_) { /* silencieux */ }
+        const select = document.getElementById('d-niveau');
+        select.innerHTML = blameTypesCache.map(b => `<option value="${b.niveau}">Blâme ${b.niveau} — ${escapeHtml(b.description.slice(0, 40))}${b.description.length > 40 ? '…' : ''}</option>`).join('');
+      }
+
+      try {
+        const { blames } = await api(`/users/${userId}/blames`);
+        renderDossier(blames);
+      } catch (err) {
+        document.getElementById('dossier-list').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderDossier(blames) {
+      const container = document.getElementById('dossier-list');
+      if (blames.length === 0) {
+        container.innerHTML = '<p class="muted" style="font-size:0.85rem">Aucun blâme enregistré.</p>';
+        return;
+      }
+      container.innerHTML = blames.map(b => `
+        <div class="flex-between" style="padding:10px 0; border-bottom:1px solid rgba(23,21,15,0.12)">
+          <div>
+            <span class="badge badge-warn">Blâme ${b.blame_niveau}</span>
+            <p class="mb-0" style="font-size:0.82rem; margin-top:4px">${escapeHtml(b.motif || '—')}</p>
+            <p class="muted mb-0" style="font-size:0.75rem">${formatDate(b.created_at)} par ${escapeHtml(b.applique_par_username || '—')}</p>
+          </div>
+          <button class="btn btn-danger btn-sm" data-del-blame="${b.id}">Retirer</button>
+        </div>
+      `).join('');
+      container.querySelectorAll('[data-del-blame]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Retirer ce blâme du dossier ?')) return;
+          const userId = document.getElementById('dossier-modal').dataset.userId;
+          try {
+            await api(`/users/blames/${btn.dataset.delBlame}`, { method: 'DELETE' });
+            toast('Blâme retiré.');
+            const { blames } = await api(`/users/${userId}/blames`);
+            renderDossier(blames);
           } catch (err) { toast(err.message, 'error'); }
         });
       });

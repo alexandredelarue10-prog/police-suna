@@ -33,6 +33,29 @@ lourd) pour rester très léger en consommation de données et en ressources ser
 - **Rangs ninja modulables** : comme les grades, les rangs (Genin, Chûnin, Kakunin, TKJ, Jônin…)
   sont gérables depuis `/admin-rangs.html` — création, modification, suppression, sans toucher
   au code.
+- **Journal d'activité** : historique des actions administratives (validations de compte,
+  changements de grade/rang, modifications du code pénal, casiers créés/supprimés, blâmes
+  appliqués, activation d'un code d'alerte…), consultable sur `/journal.html`.
+- **Bandeau d'alerte actif** : un haut gradé habilité peut activer un code d'alerte (Bleu à Noir)
+  en un clic depuis `/protocoles.html` ; il s'affiche alors en bandeau sur la page d'accueil.
+  Un seul code est actif à la fois.
+- **Avis de recherche public** : les casiers au statut "recherché" apparaissent automatiquement
+  sur la page d'accueil, sans qu'il soit nécessaire d'être connecté.
+- **Export PDF d'un casier** : bouton "Télécharger (PDF)" sur la fiche d'un casier, génère un
+  document officiel avec les infractions.
+- **Filtres avancés sur les casiers** : recherche par nom, statut, niveau de danger minimum et
+  village.
+- **Dossier disciplinaire par agent** : un haut gradé peut appliquer un blâme (du barème existant)
+  directement au profil d'un membre depuis `/admin-comptes.html` (bouton "Dossier"). Impossible
+  de se l'appliquer à soi-même ou à un compte protégé.
+- **Planning de service** (`/planning.html`) : organiser des patrouilles par date, avec agent
+  assigné, horaires et notes.
+- **Statistiques** (`/statistiques.html`) : infractions par catégorie et par mois, effectifs et
+  casiers ouverts — sans librairie de graphique externe (barres en CSS pur).
+- **Recherche globale** : barre de recherche dans la navigation, cherchant simultanément dans
+  les casiers, le code pénal et les membres.
+- **Notifications** : pastille indiquant le nombre de demandes de compte en attente, visible
+  directement dans le menu "Comptes".
 
 ## Structure du projet
 

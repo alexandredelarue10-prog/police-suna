@@ -140,9 +140,10 @@
                 ${casier.surnom ? `<p class="muted mb-0">dit "${escapeHtml(casier.surnom)}"</p>` : ''}
               </div>
               ${canManage ? `<div class="flex gap-8">
+                <a href="/api/casiers/${casier.id}/pdf" class="btn btn-secondary btn-sm">Télécharger (PDF)</a>
                 <button class="btn btn-secondary btn-sm" id="edit-btn">Modifier</button>
                 <button class="btn btn-danger btn-sm" id="delete-btn">Supprimer</button>
-              </div>` : ''}
+              </div>` : `<a href="/api/casiers/${casier.id}/pdf" class="btn btn-secondary btn-sm">Télécharger (PDF)</a>`}
             </div>
             <div class="grid grid-3" style="margin-top:20px">
               <div><strong>Village</strong><p class="mb-0">${escapeHtml(casier.village || '—')}</p></div>

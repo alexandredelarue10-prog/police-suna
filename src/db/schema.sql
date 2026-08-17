@@ -102,8 +102,10 @@ CREATE TABLE IF NOT EXISTS codes_alerte (
   mobilisation_effectif TEXT DEFAULT '',
   mobilisation_zones TEXT DEFAULT '',
   actions TEXT DEFAULT '', -- une action par ligne
+  actif BOOLEAN NOT NULL DEFAULT FALSE, -- niveau actuellement en vigueur (un seul à la fois)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE codes_alerte ADD COLUMN IF NOT EXISTS actif BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- CASIERS JUDICIAIRES
 CREATE TABLE IF NOT EXISTS casiers (
@@ -146,6 +148,42 @@ CREATE TABLE IF NOT EXISTS actus (
   epingle BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- JOURNAL D'ACTIVITÉ : trace les actions administratives (audit)
+CREATE TABLE IF NOT EXISTS activity_log (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  username_snapshot VARCHAR(40) DEFAULT '', -- conserve le nom même si le compte est supprimé plus tard
+  action VARCHAR(60) NOT NULL, -- ex: 'compte_valide', 'grade_modifie', 'casier_cree'...
+  details TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
+
+-- DOSSIER DISCIPLINAIRE : blâmes appliqués à un agent (distinct du système de blâmes générique)
+CREATE TABLE IF NOT EXISTS user_blames (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blame_niveau INTEGER NOT NULL,
+  motif TEXT DEFAULT '',
+  applique_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_blames_user ON user_blames(user_id);
+
+-- PLANNING DE SERVICE / PATROUILLES
+CREATE TABLE IF NOT EXISTS patrouilles (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL,
+  date_service DATE NOT NULL,
+  heure_debut VARCHAR(10) DEFAULT '',
+  heure_fin VARCHAR(10) DEFAULT '',
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  notes TEXT DEFAULT '',
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_patrouilles_date ON patrouilles(date_service);
 
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);

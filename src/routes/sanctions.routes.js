@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { logActivity } = require('../utils/activityLog');
 
 const router = express.Router();
 
@@ -65,6 +66,7 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_sanctions'), async
       ]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Article introuvable.' });
+    await logActivity(req.session.user.id, req.session.user.username, 'article_penal_edite', `Article ${rows[0].article || ''} — ${rows[0].nom}`);
     res.json({ sanction: rows[0] });
   } catch (err) {
     console.error('[sanctions/update]', err);

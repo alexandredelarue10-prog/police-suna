@@ -16,6 +16,11 @@ const blamesRoutes = require('./src/routes/blames.routes');
 const recidivesRoutes = require('./src/routes/recidives.routes');
 const alertesRoutes = require('./src/routes/alertes.routes');
 const rangsRoutes = require('./src/routes/rangs.routes');
+const journalRoutes = require('./src/routes/journal.routes');
+const userBlamesRoutes = require('./src/routes/user-blames.routes');
+const patrouillesRoutes = require('./src/routes/patrouilles.routes');
+const statsRoutes = require('./src/routes/stats.routes');
+const rechercheRoutes = require('./src/routes/recherche.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +57,11 @@ app.use('/api/blames', blamesRoutes);
 app.use('/api/recidives', recidivesRoutes);
 app.use('/api/alertes', alertesRoutes);
 app.use('/api/rangs', rangsRoutes);
+app.use('/api/journal', journalRoutes);
+app.use('/api/users', userBlamesRoutes); // ajoute /:id/blames et /blames/:blameId sous /api/users
+app.use('/api/patrouilles', patrouillesRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/recherche', rechercheRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

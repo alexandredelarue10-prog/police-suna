@@ -27,6 +27,8 @@ function buildNavbar(activeKey) {
   const authLinks = [
     ['dashboard.html', 'Tableau de bord', 'dashboard'],
     ['casiers.html', 'Casiers judiciaires', 'casiers'],
+    ['planning.html', 'Planning', 'planning'],
+    ['statistiques.html', 'Statistiques', 'statistiques'],
   ];
 
   const linkHtml = (href, label, key) =>
@@ -36,7 +38,8 @@ function buildNavbar(activeKey) {
   if (CURRENT_USER) {
     linksHtml += authLinks.map(([h, l, k]) => linkHtml(h, l, k)).join('');
     if (CURRENT_USER.permissions.peut_valider_comptes) {
-      linksHtml += linkHtml('admin-comptes.html', 'Comptes', 'admin-comptes');
+      linksHtml += `<a href="admin-comptes.html" class="${activeKey === 'admin-comptes' ? 'active' : ''}">Comptes<span id="pending-badge" class="badge badge-danger hidden" style="margin-left:5px; padding:1px 6px"></span></a>`;
+      linksHtml += linkHtml('journal.html', 'Journal', 'journal');
     }
     if (CURRENT_USER.permissions.peut_gerer_grades) {
       linksHtml += linkHtml('admin-grades.html', 'Grades', 'admin-grades');
@@ -47,8 +50,15 @@ function buildNavbar(activeKey) {
     }
   }
 
+  const searchHtml = CURRENT_USER
+    ? `<form id="nav-search-form" style="margin:0">
+         <input type="search" id="nav-search-input" placeholder="Rechercher…" style="padding:6px 10px; border-radius:4px; border:1px solid rgba(217,192,139,0.3); background:rgba(246,239,220,0.06); color:var(--sable-050); font-size:0.82rem; width:150px" />
+       </form>`
+    : '';
+
   const userHtml = CURRENT_USER
     ? `<div class="nav-user">
+         ${searchHtml}
          <span class="grade-chip"><span class="grade-dot" style="background:${CURRENT_USER.grade_couleur || '#8C8272'}"></span>${escapeHtml(CURRENT_USER.grade_nom || 'Sans grade')}</span>
          <a href="profil.html" style="color:var(--sable-100)">${escapeHtml(CURRENT_USER.username)}</a>
          <button class="btn btn-secondary btn-sm" id="logout-btn" type="button">Déconnexion</button>
@@ -75,6 +85,25 @@ function buildNavbar(activeKey) {
       } catch (_) { /* ignore */ }
       window.location.href = 'index.html';
     });
+  }
+
+  const searchForm = document.getElementById('nav-search-form');
+  if (searchForm) {
+    searchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = document.getElementById('nav-search-input').value.trim();
+      if (q) window.location.href = `recherche.html?q=${encodeURIComponent(q)}`;
+    });
+  }
+
+  if (CURRENT_USER && CURRENT_USER.permissions.peut_valider_comptes) {
+    api('/users/pending-count').then(({ count }) => {
+      const badge = document.getElementById('pending-badge');
+      if (badge && count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+      }
+    }).catch(() => {});
   }
 }
 
