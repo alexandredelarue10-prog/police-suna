@@ -35,14 +35,16 @@
   <script src="js/common.js"></script>
   <script>
     let gradesCache = [];
+    let rangsCache = [];
     let currentUserId = null;
 
     (async function () {
       const user = await initLayout({ activeKey: 'admin-comptes', requireAuth: true, requirePerm: 'peut_valider_comptes' });
       if (!user) return;
       currentUserId = user.id;
-      const { grades } = await api('/grades');
+      const [{ grades }, { rangs }] = await Promise.all([api('/grades'), api('/rangs')]);
       gradesCache = grades;
+      rangsCache = rangs;
       loadUsers();
     })();
 
@@ -52,19 +54,19 @@
       refuse: ['Refusé', 'badge-danger'],
     };
 
-    const rangsNinja = ['Genin', 'Chûnin', 'Kakunin', 'TKJ', 'Jônin'];
-
+    // Les grades réservés (ex : Fondateur) n'apparaissent jamais dans les listes d'attribution.
     function gradeSelectHtml(selectedId) {
+      const assignable = gradesCache.filter(g => !g.reserve);
       return `<select class="grade-select">
         <option value="">— Aucun grade —</option>
-        ${gradesCache.map(g => `<option value="${g.id}" ${String(g.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(g.nom)}</option>`).join('')}
+        ${assignable.map(g => `<option value="${g.id}" ${String(g.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(g.nom)}</option>`).join('')}
       </select>`;
     }
 
-    function rangSelectHtml(selected) {
+    function rangSelectHtml(selectedId) {
       return `<select class="rang-select">
         <option value="">— Aucun —</option>
-        ${rangsNinja.map(r => `<option value="${r}" ${r === selected ? 'selected' : ''}>${r}</option>`).join('')}
+        ${rangsCache.map(r => `<option value="${r.id}" ${String(r.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(r.nom)}</option>`).join('')}
       </select>`;
     }
 
@@ -110,7 +112,7 @@
           try {
             await api(`/users/${btn.dataset.approve}/approve`, {
               method: 'POST',
-              body: { grade_id: gradeSelect.value, rang_ninja: rangSelect.value || null },
+              body: { grade_id: gradeSelect.value, rang_id: rangSelect.value || null },
             });
             toast('Compte validé.');
             loadUsers();
@@ -145,7 +147,7 @@
             <td>${escapeHtml(u.username)}${u.protege ? ' <span class="badge badge-warn">Protégé</span>' : ''}</td>
             <td>${escapeHtml(u.nom_complet || '—')}</td>
             <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.grade_nom || '—')} 🔒</span>` : gradeSelectHtml(u.grade_id)}</td>
-            <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.rang_ninja || '—')} 🔒</span>` : rangSelectHtml(u.rang_ninja || '')}</td>
+            <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.rang_nom || '—')} 🔒</span>` : rangSelectHtml(u.rang_id)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
             <td>${u.protege ? '' : `<button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button>`}</td>
@@ -167,7 +169,7 @@
         const idx = [...tbody.children].indexOf(row);
         select.addEventListener('change', async () => {
           try {
-            await api(`/users/${approved[idx].id}/rang`, { method: 'PATCH', body: { rang_ninja: select.value || '' } });
+            await api(`/users/${approved[idx].id}/rang`, { method: 'PATCH', body: { rang_id: select.value || null } });
             toast('Rang ninja mis à jour.');
           } catch (err) { toast(err.message, 'error'); loadUsers(); }
         });

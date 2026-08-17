@@ -63,6 +63,12 @@
             <input type="checkbox" id="p-protocoles" style="width:auto"> Gérer les codes d'alerte (protocoles)
           </label>
         </div>
+        <div class="field">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; color:var(--sceau-600)">
+            <input type="checkbox" id="p-reserve" style="width:auto"> Grade réservé (ne peut être attribué à personne via l'interface)
+          </label>
+          <div class="field-hint">À réserver aux comptes techniques/administrateurs. Un grade réservé n'apparaît jamais dans les listes d'attribution de grade.</div>
+        </div>
         <div class="modal-close-row">
           <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
           <button type="submit" class="btn btn-primary">Enregistrer</button>
@@ -101,6 +107,7 @@
                 <span class="grade-dot" style="background:${g.couleur}; width:16px; height:16px"></span>
                 <div>
                   <strong>${escapeHtml(g.nom)}</strong>
+                  ${g.reserve ? '<span class="badge badge-danger" style="margin-left:6px">Réservé</span>' : ''}
                   <p class="muted mb-0" style="font-size:0.8rem">Niveau ${g.niveau} · ${permSummary(g)}</p>
                 </div>
               </div>
@@ -156,6 +163,7 @@
         document.getElementById('p-casiers').checked = grade.peut_gerer_casiers;
         document.getElementById('p-actus').checked = grade.peut_gerer_actus;
         document.getElementById('p-protocoles').checked = grade.peut_gerer_protocoles;
+        document.getElementById('p-reserve').checked = grade.reserve;
       } else {
         document.getElementById('modal-title').textContent = 'Nouveau grade';
         document.getElementById('g-id').value = '';
@@ -176,6 +184,7 @@
         peut_gerer_casiers: document.getElementById('p-casiers').checked,
         peut_gerer_actus: document.getElementById('p-actus').checked,
         peut_gerer_protocoles: document.getElementById('p-protocoles').checked,
+        reserve: document.getElementById('p-reserve').checked,
       };
       try {
         if (id) {

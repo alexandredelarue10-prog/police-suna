@@ -37,7 +37,7 @@
             <div class="rank-members">
               ${g.membres.length === 0
                 ? '<span class="muted" style="font-size:0.82rem">Aucun membre actuellement</span>'
-                : g.membres.map(m => `<span class="member-chip">${escapeHtml(m.nom_complet || m.username)}${m.rang_ninja ? ` · ${escapeHtml(m.rang_ninja)}` : ''}${m.brigade ? ` · ${escapeHtml(m.brigade)}` : ''}</span>`).join('')}
+                : g.membres.map(m => `<span class="member-chip">${escapeHtml(m.nom_complet || m.username)}${m.rang_nom ? ` · ${escapeHtml(m.rang_nom)}` : ''}${m.brigade ? ` · ${escapeHtml(m.brigade)}` : ''}</span>`).join('')}
             </div>
           </div>
         `).join('');

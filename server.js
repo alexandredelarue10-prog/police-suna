@@ -15,6 +15,7 @@ const newsRoutes = require('./src/routes/news.routes');
 const blamesRoutes = require('./src/routes/blames.routes');
 const recidivesRoutes = require('./src/routes/recidives.routes');
 const alertesRoutes = require('./src/routes/alertes.routes');
+const rangsRoutes = require('./src/routes/rangs.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +51,7 @@ app.use('/api/actus', newsRoutes);
 app.use('/api/blames', blamesRoutes);
 app.use('/api/recidives', recidivesRoutes);
 app.use('/api/alertes', alertesRoutes);
+app.use('/api/rangs', rangsRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

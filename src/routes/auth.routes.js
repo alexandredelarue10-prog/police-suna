@@ -17,6 +17,9 @@ async function buildSessionUser(userRow) {
   let gradeNom = null;
   let gradeCouleur = null;
   let gradeNiveau = 0;
+  let gradeReserve = false;
+  let rangNom = null;
+  let rangCouleur = null;
 
   if (userRow.grade_id) {
     const { rows } = await pool.query('SELECT * FROM grades WHERE id = $1', [userRow.grade_id]);
@@ -25,6 +28,7 @@ async function buildSessionUser(userRow) {
       gradeNom = g.nom;
       gradeCouleur = g.couleur;
       gradeNiveau = g.niveau;
+      gradeReserve = g.reserve;
       permissions = {
         peut_valider_comptes: g.peut_valider_comptes,
         peut_gerer_grades: g.peut_gerer_grades,
@@ -36,18 +40,29 @@ async function buildSessionUser(userRow) {
     }
   }
 
+  if (userRow.rang_id) {
+    const { rows } = await pool.query('SELECT nom, couleur FROM rangs_ninja WHERE id = $1', [userRow.rang_id]);
+    if (rows[0]) {
+      rangNom = rows[0].nom;
+      rangCouleur = rows[0].couleur;
+    }
+  }
+
   return {
     id: userRow.id,
     username: userRow.username,
     nom_complet: userRow.nom_complet,
     matricule: userRow.matricule,
-    rang_ninja: userRow.rang_ninja,
+    rang_id: userRow.rang_id,
+    rang_nom: rangNom,
+    rang_couleur: rangCouleur,
     brigade: userRow.brigade,
     protege: userRow.protege,
     grade_id: userRow.grade_id,
     grade_nom: gradeNom,
     grade_couleur: gradeCouleur,
     grade_niveau: gradeNiveau,
+    grade_reserve: gradeReserve,
     permissions,
   };
 }

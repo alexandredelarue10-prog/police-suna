@@ -21,7 +21,8 @@ lourd) pour rester très léger en consommation de données et en ressources ser
 - **Compte principal protégé** créé automatiquement au premier démarrage :
   - Identifiant : `DEV`
   - Mot de passe : `roidudev`
-  - Grade : Dirigeant (tous les droits)
+  - Grade : **Fondateur** — un grade réservé, créé exprès pour lui et qu'aucun autre compte ne
+    peut jamais recevoir (verrouillé même contre modification/suppression par l'interface).
   - **Change ce mot de passe dès le premier déploiement** (page "Mon profil" une fois connecté —
     c'est la seule chose que ce compte peut modifier sur lui-même).
   - Ce compte est **protégé** : personne (pas même lui-même) ne peut changer son grade, son rang,
@@ -29,6 +30,9 @@ lourd) pour rester très léger en consommation de données et en ressources ser
 - **Anti auto-promotion** : aucun utilisateur, quel que soit son grade, ne peut modifier son
   propre grade ou son propre rang ninja depuis l'interface. Seul un autre haut gradé habilité
   peut le faire.
+- **Rangs ninja modulables** : comme les grades, les rangs (Genin, Chûnin, Kakunin, TKJ, Jônin…)
+  sont gérables depuis `/admin-rangs.html` — création, modification, suppression, sans toucher
+  au code.
 
 ## Structure du projet
 
@@ -108,7 +112,10 @@ Tout est pensé pour ne jamais toucher au code :
 - **Grades** (`/admin-grades.html`) : créer/modifier/supprimer un grade, définir son niveau
   hiérarchique, sa couleur, et cocher les permissions qu'il donne (valider les comptes, gérer
   les grades, gérer le code pénal, gérer les casiers, publier des communiqués, gérer les
-  protocoles).
+  protocoles). Un grade peut être marqué "réservé" : il devient alors impossible à attribuer,
+  modifier ou supprimer depuis l'interface (utilisé pour le compte `DEV`).
+- **Rangs ninja** (`/admin-rangs.html`) : créer/modifier/supprimer les rangs (Genin, Chûnin,
+  Kakunin, TKJ, Jônin…), totalement indépendants des grades/postes de police.
 - **Code pénal** (`/code-penal.html`) : ajouter/modifier/supprimer un article (numéro, catégorie,
   amende en ryō, cellule/T.I.G), le système de blâmes et les paliers de récidive.
 - **Protocoles** (`/protocoles.html`) : éditer chaque code d'alerte (Bleu à Noir) — situation de

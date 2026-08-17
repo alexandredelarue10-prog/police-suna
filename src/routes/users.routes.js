@@ -5,14 +5,24 @@ const { requireAuth, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Vérifie qu'un grade existe et n'est pas réservé (empêche son attribution via l'interface)
+async function assertGradeAssignable(gradeId) {
+  const { rows } = await pool.query('SELECT id, reserve FROM grades WHERE id = $1', [gradeId]);
+  if (rows.length === 0) return { ok: false, error: 'Grade introuvable.' };
+  if (rows[0].reserve) return { ok: false, error: 'Ce grade est réservé et ne peut être attribué à personne.' };
+  return { ok: true };
+}
+
 // GET /api/users — liste de tous les comptes (hauts gradés uniquement)
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.rang_ninja, u.brigade, u.protege,
-              g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau
+      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege,
+              g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
+              r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur
        FROM users u
        LEFT JOIN grades g ON g.id = u.grade_id
+       LEFT JOIN rangs_ninja r ON r.id = u.rang_id
        ORDER BY (u.statut = 'en_attente') DESC, u.created_at DESC`
     );
     res.json({ users: rows });
@@ -25,21 +35,21 @@ router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (r
 // POST /api/users/:id/approve — valide un compte, lui attribue un grade et (optionnel) un rang ninja / brigade
 router.post('/:id/approve', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
-    const { grade_id, rang_ninja, brigade } = req.body;
+    const { grade_id, rang_id, brigade } = req.body;
     if (!grade_id) return res.status(400).json({ error: 'Un grade doit être choisi pour valider le compte.' });
 
-    const { rows: gradeRows } = await pool.query('SELECT id FROM grades WHERE id = $1', [grade_id]);
-    if (gradeRows.length === 0) return res.status(400).json({ error: 'Grade introuvable.' });
+    const check = await assertGradeAssignable(grade_id);
+    if (!check.ok) return res.status(403).json({ error: check.error });
 
     // Génère un matricule simple si absent
     const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
     const matricule = `SUNA-${String(countRows[0].n + 1).padStart(4, '0')}`;
 
     const { rows } = await pool.query(
-      `UPDATE users SET statut = 'approuve', grade_id = $1, rang_ninja = COALESCE($2, rang_ninja), brigade = COALESCE($3, brigade),
+      `UPDATE users SET statut = 'approuve', grade_id = $1, rang_id = $2, brigade = COALESCE($3, brigade),
               valide_par = $4, valide_le = now(), matricule = COALESCE(matricule, $5)
        WHERE id = $6 RETURNING id, username`,
-      [grade_id, rang_ninja || null, brigade || null, req.session.user.id, matricule, req.params.id]
+      [grade_id, rang_id || null, brigade || null, req.session.user.id, matricule, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
 
@@ -82,6 +92,11 @@ router.patch('/:id/grade', requireAuth, requirePermission('peut_valider_comptes'
     }
 
     const { grade_id } = req.body;
+    if (grade_id) {
+      const check = await assertGradeAssignable(grade_id);
+      if (!check.ok) return res.status(403).json({ error: check.error });
+    }
+
     const { rows } = await pool.query(
       `UPDATE users SET grade_id = $1 WHERE id = $2 RETURNING id, username`,
       [grade_id || null, targetId]
@@ -108,10 +123,10 @@ router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes')
       return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être modifié.' });
     }
 
-    const { rang_ninja, brigade } = req.body;
+    const { rang_id, brigade } = req.body;
     const { rows } = await pool.query(
-      `UPDATE users SET rang_ninja = $1, brigade = $2 WHERE id = $3 RETURNING id, username`,
-      [rang_ninja || '', brigade || '', targetId]
+      `UPDATE users SET rang_id = $1, brigade = $2 WHERE id = $3 RETURNING id, username`,
+      [rang_id || null, brigade !== undefined ? brigade : '', targetId]
     );
     res.json({ message: `Rang de ${rows[0].username} mis à jour.` });
   } catch (err) {

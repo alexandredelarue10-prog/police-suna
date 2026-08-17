@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion des rangs ninja — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Gestion des rangs ninja</h1>
+          <p class="muted">Genin, Chûnin, Kakunin, TKJ, Jônin… Étiquette informative distincte du grade (poste) de police.</p>
+        </div>
+        <button class="btn btn-primary" id="new-rang-btn">+ Nouveau rang</button>
+      </div>
+
+      <div id="rangs-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="rang-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouveau rang</h3>
+      <form id="rang-form">
+        <input type="hidden" id="r-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="r-nom">Nom du rang *</label>
+            <input type="text" id="r-nom" required />
+          </div>
+          <div class="field">
+            <label for="r-niveau">Niveau hiérarchique</label>
+            <input type="number" id="r-niveau" value="0" />
+            <div class="field-hint">Plus le nombre est élevé, plus le rang est avancé.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="r-couleur">Couleur du badge</label>
+          <input type="color" id="r-couleur" value="#3E5C6B" style="height:42px; padding:4px" />
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'admin-rangs', requireAuth: true, requirePerm: 'peut_gerer_grades' });
+      if (!user) return;
+      loadRangs();
+      document.getElementById('new-rang-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('rang-modal').classList.remove('open'));
+      document.getElementById('rang-form').addEventListener('submit', saveRang);
+    })();
+
+    let rangsCache = [];
+
+    async function loadRangs() {
+      const container = document.getElementById('rangs-list');
+      try {
+        const { rangs } = await api('/rangs');
+        rangsCache = rangs;
+        if (rangs.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun rang défini.</div>';
+          return;
+        }
+        container.innerHTML = rangs.map(r => `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="flex-wrap:wrap; gap:12px">
+              <div class="flex gap-12" style="align-items:center">
+                <span class="grade-dot" style="background:${r.couleur}; width:16px; height:16px"></span>
+                <div>
+                  <strong>${escapeHtml(r.nom)}</strong>
+                  <p class="muted mb-0" style="font-size:0.8rem">Niveau ${r.niveau}</p>
+                </div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${r.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${r.id}">Supprimer</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openModal(rangsCache.find(r => r.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce rang ? Les membres concernés perdront ce rang.')) return;
+            try {
+              await api(`/rangs/${btn.dataset.delete}`, { method: 'DELETE' });
+              toast('Rang supprimé.');
+              loadRangs();
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(rang = null) {
+      document.getElementById('rang-form').reset();
+      document.getElementById('r-couleur').value = '#3E5C6B';
+      if (rang) {
+        document.getElementById('modal-title').textContent = 'Modifier le rang';
+        document.getElementById('r-id').value = rang.id;
+        document.getElementById('r-nom').value = rang.nom;
+        document.getElementById('r-niveau').value = rang.niveau;
+        document.getElementById('r-couleur').value = rang.couleur;
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau rang';
+        document.getElementById('r-id').value = '';
+      }
+      document.getElementById('rang-modal').classList.add('open');
+    }
+
+    async function saveRang(e) {
+      e.preventDefault();
+      const id = document.getElementById('r-id').value;
+      const payload = {
+        nom: document.getElementById('r-nom').value.trim(),
+        niveau: parseInt(document.getElementById('r-niveau').value) || 0,
+        couleur: document.getElementById('r-couleur').value,
+      };
+      try {
+        if (id) {
+          await api(`/rangs/${id}`, { method: 'PUT', body: payload });
+          toast('Rang mis à jour.');
+        } else {
+          await api('/rangs', { method: 'POST', body: payload });
+          toast('Rang créé.');
+        }
+        document.getElementById('rang-modal').classList.remove('open');
+        loadRangs();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

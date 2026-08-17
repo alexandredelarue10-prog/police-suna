@@ -14,19 +14,32 @@ CREATE TABLE IF NOT EXISTS grades (
   peut_gerer_casiers BOOLEAN NOT NULL DEFAULT FALSE,
   peut_gerer_actus BOOLEAN NOT NULL DEFAULT FALSE,
   peut_gerer_protocoles BOOLEAN NOT NULL DEFAULT FALSE, -- codes d'alerte
+  reserve BOOLEAN NOT NULL DEFAULT FALSE, -- grade exclusif : ne peut être attribué à personne via l'interface
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS reserve BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- RANGS NINJA (Genin, Chûnin, Kakunin, TKJ, Jônin...) : entièrement modifiables via l'interface admin
+-- Distinct du "grade" (poste au sein de la police) : c'est une étiquette purement informative.
+CREATE TABLE IF NOT EXISTS rangs_ninja (
+  id SERIAL PRIMARY KEY,
+  nom VARCHAR(60) NOT NULL UNIQUE,
+  niveau INTEGER NOT NULL DEFAULT 0,
+  couleur VARCHAR(7) NOT NULL DEFAULT '#3E5C6B',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- UTILISATEURS
 -- Deux hiérarchies distinctes chez la police de Suna : le "poste" (grade_id -> permissions du site)
--- et le "rang ninja" (rang_ninja -> simple étiquette informative : Genin, Chûnin, Kakunin, TKJ, Jônin...).
+-- et le "rang ninja" (rang_id -> étiquette informative, entièrement gérable via /admin-rangs.html).
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(40) NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   nom_complet VARCHAR(100),
   grade_id INTEGER REFERENCES grades(id) ON DELETE SET NULL,
-  rang_ninja VARCHAR(40) DEFAULT '',
+  rang_ninja VARCHAR(40) DEFAULT '', -- ancien champ texte, conservé pour migration douce
+  rang_id INTEGER REFERENCES rangs_ninja(id) ON DELETE SET NULL,
   brigade VARCHAR(80) DEFAULT '', -- ex: "Brigade de déminage"
   statut VARCHAR(20) NOT NULL DEFAULT 'en_attente', -- en_attente | approuve | refuse
   matricule VARCHAR(20) UNIQUE,
@@ -35,8 +48,9 @@ CREATE TABLE IF NOT EXISTS users (
   valide_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
   valide_le TIMESTAMPTZ
 );
--- Migration idempotente : ajoute la colonne si la table existait déjà sans elle
+-- Migrations idempotentes : ajoutent les colonnes si la table existait déjà sans elles
 ALTER TABLE users ADD COLUMN IF NOT EXISTS protege BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rang_id INTEGER REFERENCES rangs_ninja(id) ON DELETE SET NULL;
 
 -- TYPES DE SANCTIONS (code pénal) : entièrement modifiables (article, amende, cellule/TIG, gravité...)
 CREATE TABLE IF NOT EXISTS sanctions_types (
@@ -109,7 +123,6 @@ CREATE TABLE IF NOT EXISTS casiers (
 );
 
 -- INFRACTIONS liées à un casier (une ligne = une sanction appliquée)
--- Inclut aussi le suivi de récidive pour cette infraction précise.
 CREATE TABLE IF NOT EXISTS casier_infractions (
   id SERIAL PRIMARY KEY,
   casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
@@ -118,7 +131,7 @@ CREATE TABLE IF NOT EXISTS casier_infractions (
   description TEXT DEFAULT '',
   amende_appliquee INTEGER,
   cellule_appliquee VARCHAR(100) DEFAULT '',
-  occurrence_recidive VARCHAR(20) DEFAULT '', -- ex: "1ère", "2ème"... si applicable
+  occurrence_recidive VARCHAR(20) DEFAULT '',
   date_infraction DATE NOT NULL DEFAULT CURRENT_DATE,
   agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

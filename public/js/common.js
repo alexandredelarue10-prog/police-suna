@@ -40,6 +40,7 @@ function buildNavbar(activeKey) {
     }
     if (CURRENT_USER.permissions.peut_gerer_grades) {
       linksHtml += linkHtml('admin-grades.html', 'Grades', 'admin-grades');
+      linksHtml += linkHtml('admin-rangs.html', 'Rangs', 'admin-rangs');
     }
     if (CURRENT_USER.permissions.peut_gerer_actus) {
       linksHtml += linkHtml('admin-actus.html', 'Communiqués', 'admin-actus');
