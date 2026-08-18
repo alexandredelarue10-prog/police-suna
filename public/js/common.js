@@ -17,42 +17,73 @@ function buildNavbar(activeKey) {
   const nav = document.createElement('nav');
   nav.className = 'navbar';
 
-  const publicLinks = [
-    ['index.html', 'Accueil', 'accueil'],
-    ['organigramme.html', 'Organigramme', 'organigramme'],
-    ['code-penal.html', 'Code pénal', 'code-penal'],
-    ['protocoles.html', 'Protocoles', 'protocoles'],
-  ];
+  const linkHtml = (href, label, key, badgeId) =>
+    `<a href="${href}" class="${activeKey === key ? 'active' : ''}">${label}${badgeId ? `<span id="${badgeId}" class="nav-badge-count hidden">0</span>` : ''}</a>`;
 
-  const authLinks = [
-    ['dashboard.html', 'Tableau de bord', 'dashboard'],
-    ['casiers.html', 'Casiers judiciaires', 'casiers'],
-    ['planning.html', 'Planning', 'planning'],
-    ['statistiques.html', 'Statistiques', 'statistiques'],
-  ];
+  // --- Groupe 1 : Village (toujours visible, public) ---
+  const villageLinks = [
+    linkHtml('index.html', 'Accueil', 'accueil'),
+    linkHtml('organigramme.html', 'Organigramme', 'organigramme'),
+    linkHtml('code-penal.html', 'Code pénal', 'code-penal'),
+    linkHtml('protocoles.html', 'Protocoles', 'protocoles'),
+  ].join('');
 
-  const linkHtml = (href, label, key) =>
-    `<a href="${href}" class="${activeKey === key ? 'active' : ''}">${label}</a>`;
-
-  let linksHtml = publicLinks.map(([h, l, k]) => linkHtml(h, l, k)).join('');
+  // --- Groupe 2 : Mon espace (connecté) ---
+  let espaceLinks = '';
   if (CURRENT_USER) {
-    linksHtml += authLinks.map(([h, l, k]) => linkHtml(h, l, k)).join('');
+    espaceLinks = [
+      linkHtml('dashboard.html', 'Tableau de bord', 'dashboard'),
+      linkHtml('casiers.html', 'Casiers judiciaires', 'casiers'),
+      linkHtml('planning.html', 'Planning', 'planning'),
+      linkHtml('statistiques.html', 'Statistiques', 'statistiques'),
+      linkHtml('profil.html', 'Mon profil', 'profil'),
+    ].join('');
+  }
+
+  // --- Groupe 3 : Administration (selon permissions) ---
+  let adminLinks = '';
+  if (CURRENT_USER) {
     if (CURRENT_USER.permissions.peut_valider_comptes) {
-      linksHtml += `<a href="admin-comptes.html" class="${activeKey === 'admin-comptes' ? 'active' : ''}">Comptes<span id="pending-badge" class="badge badge-danger hidden" style="margin-left:5px; padding:1px 6px"></span></a>`;
-      linksHtml += linkHtml('journal.html', 'Journal', 'journal');
+      adminLinks += linkHtml('admin-comptes.html', 'Comptes', 'admin-comptes', 'pending-badge');
+      adminLinks += linkHtml('journal.html', 'Journal d\'activité', 'journal');
     }
     if (CURRENT_USER.permissions.peut_gerer_grades) {
-      linksHtml += linkHtml('admin-grades.html', 'Grades', 'admin-grades');
-      linksHtml += linkHtml('admin-rangs.html', 'Rangs', 'admin-rangs');
+      adminLinks += linkHtml('admin-grades.html', 'Grades', 'admin-grades');
+      adminLinks += linkHtml('admin-rangs.html', 'Rangs ninja', 'admin-rangs');
+    }
+    if (CURRENT_USER.permissions.peut_gerer_sanctions) {
+      adminLinks += linkHtml('code-penal.html', 'Éditer le code pénal', 'code-penal-edit');
+    }
+    if (CURRENT_USER.permissions.peut_gerer_protocoles) {
+      adminLinks += linkHtml('protocoles.html', 'Éditer les protocoles', 'protocoles-edit');
     }
     if (CURRENT_USER.permissions.peut_gerer_actus) {
-      linksHtml += linkHtml('admin-actus.html', 'Communiqués', 'admin-actus');
+      adminLinks += linkHtml('admin-actus.html', 'Communiqués', 'admin-actus');
     }
   }
 
+  const groups = [
+    ['Le village', villageLinks],
+    CURRENT_USER ? ['Mon espace', espaceLinks] : null,
+    adminLinks ? ['Administration', adminLinks] : null,
+  ].filter(Boolean);
+
+  const dropdownHtml = `
+    <div class="nav-dropdown" id="nav-dropdown">
+      <div class="nav-dropdown-inner">
+        ${groups.map(([title, links]) => `
+          <div class="nav-group">
+            <div class="nav-group-title">${title}</div>
+            <div class="nav-group-links">${links}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+
   const searchHtml = CURRENT_USER
-    ? `<form id="nav-search-form" style="margin:0">
-         <input type="search" id="nav-search-input" placeholder="Rechercher…" style="padding:6px 10px; border-radius:4px; border:1px solid rgba(217,192,139,0.3); background:rgba(246,239,220,0.06); color:var(--sable-050); font-size:0.82rem; width:150px" />
+    ? `<form id="nav-search-form" class="nav-search-form">
+         <span class="nav-search-icon"></span>
+         <input type="search" id="nav-search-input" placeholder="Rechercher…" />
        </form>`
     : '';
 
@@ -60,7 +91,6 @@ function buildNavbar(activeKey) {
     ? `<div class="nav-user">
          ${searchHtml}
          <span class="grade-chip"><span class="grade-dot" style="background:${CURRENT_USER.grade_couleur || '#8C8272'}"></span>${escapeHtml(CURRENT_USER.grade_nom || 'Sans grade')}</span>
-         <a href="profil.html" style="color:var(--sable-100)">${escapeHtml(CURRENT_USER.username)}</a>
          <button class="btn btn-secondary btn-sm" id="logout-btn" type="button">Déconnexion</button>
        </div>`
     : `<div class="nav-user">
@@ -71,18 +101,45 @@ function buildNavbar(activeKey) {
   nav.innerHTML = `
     <div class="wrap">
       <a href="index.html" class="brand"><span class="sceau" style="width:32px;height:32px"></span>Police de Sunagakure</a>
-      <div class="nav-links">${linksHtml}</div>
-      ${userHtml}
-    </div>`;
+      <div class="nav-menu-row">
+        <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        ${userHtml}
+      </div>
+    </div>
+    ${dropdownHtml}
+    <div class="nav-scrim" id="nav-scrim"></div>`;
 
   document.body.prepend(nav);
+
+  // --- Interactions ---
+  const toggleBtn = document.getElementById('nav-toggle');
+  const dropdown = document.getElementById('nav-dropdown');
+  const scrim = document.getElementById('nav-scrim');
+
+  function closeMenu() {
+    toggleBtn.classList.remove('open');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    dropdown.classList.remove('open');
+    scrim.classList.remove('open');
+  }
+  function toggleMenu() {
+    const willOpen = !dropdown.classList.contains('open');
+    toggleBtn.classList.toggle('open', willOpen);
+    toggleBtn.setAttribute('aria-expanded', String(willOpen));
+    dropdown.classList.toggle('open', willOpen);
+    scrim.classList.toggle('open', willOpen);
+  }
+  toggleBtn.addEventListener('click', toggleMenu);
+  scrim.addEventListener('click', closeMenu);
+  dropdown.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeMenu));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
-      try {
-        await api('/auth/logout', { method: 'POST' });
-      } catch (_) { /* ignore */ }
+      try { await api('/auth/logout', { method: 'POST' }); } catch (_) { /* ignore */ }
       window.location.href = 'index.html';
     });
   }

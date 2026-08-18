@@ -27,7 +27,10 @@ router.get('/', requireAuth, async (req, res) => {
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT * FROM casiers ${where} ORDER BY updated_at DESC LIMIT $${i}`,
+      `SELECT c.*, COALESCE(ci.n, 0)::int AS nb_infractions
+       FROM casiers c
+       LEFT JOIN (SELECT casier_id, COUNT(*) AS n FROM casier_infractions GROUP BY casier_id) ci ON ci.casier_id = c.id
+       ${where} ORDER BY c.updated_at DESC LIMIT $${i}`,
       params
     );
     res.json({ casiers: rows });

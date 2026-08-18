@@ -19,6 +19,14 @@
       <div id="pending-alert"></div>
 
       <div class="grid grid-3" id="quick-links"></div>
+
+      <div id="recent-activity-section" class="hidden" style="margin-top:36px">
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.1rem">Activité récente</h2>
+          <a href="journal.html" style="font-size:0.85rem">Voir tout le journal →</a>
+        </div>
+        <div id="recent-activity-list"></div>
+      </div>
     </div>
   </div>
 
@@ -62,6 +70,22 @@
                 ${pending.length} demande(s) de compte en attente de validation.
                 <a href="admin-comptes.html">Traiter les demandes →</a>
               </div>`;
+          }
+        } catch (_) { /* silencieux */ }
+
+        try {
+          const { entries } = await api('/journal?limit=5');
+          if (entries.length > 0) {
+            document.getElementById('recent-activity-section').classList.remove('hidden');
+            document.getElementById('recent-activity-list').innerHTML = entries.map(e => `
+              <div class="flex-between" style="padding:10px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                <div>
+                  <span class="badge badge-muted">${escapeHtml(e.action_label)}</span>
+                  <span style="font-size:0.85rem; margin-left:6px">${escapeHtml(e.details || '')}</span>
+                </div>
+                <span class="muted" style="font-size:0.76rem; white-space:nowrap">${escapeHtml(e.username_snapshot || '—')} · ${formatDateTime(e.created_at)}</span>
+              </div>
+            `).join('');
           }
         } catch (_) { /* silencieux */ }
       }

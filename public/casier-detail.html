@@ -14,13 +14,38 @@
     </div>
   </div>
 
-  <!-- Modale ajout infraction -->
+  <!-- Modale ajout infraction(s) -->
   <div class="modal-backdrop" id="infraction-modal">
-    <div class="modal">
-      <h3>Ajouter une infraction</h3>
-      <form id="infraction-form">
+    <div class="modal" style="max-width:560px">
+      <h3>Ajouter des infractions</h3>
+
+      <div class="flex gap-8" style="margin-bottom:16px; border-bottom:1px solid rgba(23,21,15,0.15); padding-bottom:12px">
+        <button type="button" class="btn btn-primary btn-sm" id="tab-multi-btn">Sélection multiple (barème)</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="tab-custom-btn">Sanction personnalisée</button>
+      </div>
+
+      <!-- Mode 1 : sélection multiple du barème -->
+      <div id="tab-multi">
         <div class="field">
-          <label for="i-sanction">Type de sanction (barème)</label>
+          <label for="multi-date">Date commune</label>
+          <input type="date" id="multi-date" />
+        </div>
+        <div class="field">
+          <label for="multi-recidive">Occurrence de récidive (appliquée à toutes)</label>
+          <select id="multi-recidive"><option value="">— Aucune —</option></select>
+        </div>
+        <div class="field-hint" style="margin-bottom:8px">Cochez une ou plusieurs infractions du barème à appliquer d'un coup :</div>
+        <div id="multi-sanction-list" style="max-height:260px; overflow-y:auto; border:1px solid rgba(23,21,15,0.15); border-radius:4px; padding:10px"></div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="infraction-cancel-multi">Annuler</button>
+          <button type="button" class="btn btn-primary" id="multi-submit-btn">Ajouter la sélection</button>
+        </div>
+      </div>
+
+      <!-- Mode 2 : sanction personnalisée (formulaire existant) -->
+      <form id="infraction-form" class="hidden">
+        <div class="field">
+          <label for="i-sanction">Pré-remplir depuis le barème (optionnel)</label>
           <select id="i-sanction">
             <option value="">— Sanction libre (personnalisée) —</option>
           </select>
@@ -80,14 +105,24 @@
       document.getElementById('infraction-cancel').addEventListener('click', () => {
         document.getElementById('infraction-modal').classList.remove('open');
       });
+      document.getElementById('infraction-cancel-multi').addEventListener('click', () => {
+        document.getElementById('infraction-modal').classList.remove('open');
+      });
       document.getElementById('infraction-form').addEventListener('submit', addInfraction);
+      document.getElementById('multi-submit-btn').addEventListener('click', addMultipleInfractions);
+
+      document.getElementById('tab-multi-btn').addEventListener('click', () => switchTab('multi'));
+      document.getElementById('tab-custom-btn').addEventListener('click', () => switchTab('custom'));
 
       if (user.permissions.peut_gerer_casiers) {
         try {
           const { sanctions } = await api('/sanctions');
           sanctionsCache = sanctions;
           const select = document.getElementById('i-sanction');
-          sanctions.filter(s => s.actif).forEach(s => {
+          const multiList = document.getElementById('multi-sanction-list');
+          const activeSanctions = sanctions.filter(s => s.actif);
+
+          activeSanctions.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.id;
             const amendeLabel = s.amende ? s.amende.toLocaleString('fr-FR') + ' ryō' : 'jugement';
@@ -104,17 +139,49 @@
             }
           });
 
+          if (activeSanctions.length === 0) {
+            multiList.innerHTML = '<p class="muted" style="font-size:0.85rem">Aucune sanction active dans le barème.</p>';
+          } else {
+            multiList.innerHTML = activeSanctions.map(s => `
+              <label style="display:flex; align-items:flex-start; gap:8px; padding:6px 4px; text-transform:none; font-weight:400; cursor:pointer; border-radius:4px;" onmouseover="this.style.background='rgba(184,100,46,0.08)'" onmouseout="this.style.background='none'">
+                <input type="checkbox" class="multi-sanction-check" value="${s.id}" style="width:auto; margin-top:3px" />
+                <span style="font-size:0.85rem"><strong>${escapeHtml(s.article || '—')}</strong> — ${escapeHtml(s.nom)}
+                  <span class="muted" style="display:block; font-size:0.76rem">${s.amende ? s.amende.toLocaleString('fr-FR') + ' ryō' : 'Jugement'}${s.cellule_tig ? ' · ' + escapeHtml(s.cellule_tig) : ''}</span>
+                </span>
+              </label>
+            `).join('');
+          }
+
           const { recidives } = await api('/recidives');
-          const recSelect = document.getElementById('i-recidive');
-          recidives.forEach(r => {
-            const opt = document.createElement('option');
-            opt.value = r.occurrence;
-            opt.textContent = r.occurrence;
-            recSelect.appendChild(opt);
+          [document.getElementById('i-recidive'), document.getElementById('multi-recidive')].forEach(recSelect => {
+            recidives.forEach(r => {
+              const opt = document.createElement('option');
+              opt.value = r.occurrence;
+              opt.textContent = r.occurrence;
+              recSelect.appendChild(opt);
+            });
           });
         } catch (_) { /* silencieux */ }
       }
     })();
+
+    function switchTab(tab) {
+      const multiBtn = document.getElementById('tab-multi-btn');
+      const customBtn = document.getElementById('tab-custom-btn');
+      const multiPane = document.getElementById('tab-multi');
+      const customPane = document.getElementById('infraction-form');
+      if (tab === 'multi') {
+        multiBtn.className = 'btn btn-primary btn-sm';
+        customBtn.className = 'btn btn-secondary btn-sm';
+        multiPane.classList.remove('hidden');
+        customPane.classList.add('hidden');
+      } else {
+        multiBtn.className = 'btn btn-secondary btn-sm';
+        customBtn.className = 'btn btn-primary btn-sm';
+        multiPane.classList.add('hidden');
+        customPane.classList.remove('hidden');
+      }
+    }
 
     const statutLabels = {
       libre: ['Libre', 'badge-ok'],
@@ -187,6 +254,9 @@
           document.getElementById('add-infraction-btn').addEventListener('click', () => {
             document.getElementById('infraction-form').reset();
             document.getElementById('i-date').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('multi-date').value = new Date().toISOString().slice(0, 10);
+            document.querySelectorAll('.multi-sanction-check').forEach(c => { c.checked = false; });
+            switchTab('multi');
             document.getElementById('infraction-modal').classList.add('open');
           });
           document.getElementById('delete-btn').addEventListener('click', () => deleteCasier(casier));
@@ -220,6 +290,54 @@
         loadDetail();
       } catch (err) {
         toast(err.message, 'error');
+      }
+    }
+
+    async function addMultipleInfractions() {
+      const checked = [...document.querySelectorAll('.multi-sanction-check:checked')].map(c => c.value);
+      if (checked.length === 0) {
+        toast('Sélectionnez au moins une infraction.', 'error');
+        return;
+      }
+      const date = document.getElementById('multi-date').value || null;
+      const recidive = document.getElementById('multi-recidive').value;
+      const btn = document.getElementById('multi-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Ajout en cours…';
+
+      let successCount = 0;
+      let errorCount = 0;
+      for (const sanctionId of checked) {
+        const s = sanctionsCache.find(x => String(x.id) === sanctionId);
+        if (!s) continue;
+        try {
+          await api(`/casiers/${casierId}/infractions`, {
+            method: 'POST',
+            body: {
+              sanction_id: s.id,
+              titre: s.nom,
+              description: s.description,
+              amende_appliquee: s.amende,
+              cellule_appliquee: s.cellule_tig,
+              occurrence_recidive: recidive,
+              date_infraction: date,
+            },
+          });
+          successCount++;
+        } catch (_) {
+          errorCount++;
+        }
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Ajouter la sélection';
+
+      if (successCount > 0) {
+        toast(`${successCount} infraction(s) ajoutée(s)${errorCount ? `, ${errorCount} échec(s)` : ''}.`, errorCount ? 'error' : 'success');
+        document.getElementById('infraction-modal').classList.remove('open');
+        loadDetail();
+      } else {
+        toast('Échec de l\'ajout des infractions.', 'error');
       }
     }
 
