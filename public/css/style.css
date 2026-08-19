@@ -149,6 +149,8 @@ p { color: var(--sable-100); }
 
 /* Panneau déroulant regroupant toutes les catégories */
 .nav-dropdown {
+  position: relative;
+  z-index: 49; /* doit rester au-dessus du voile (.nav-scrim, z-index 48) pour que les liens restent cliquables */
   max-height: 0;
   overflow: hidden;
   background: linear-gradient(180deg, var(--nuit-800), var(--nuit-900));
