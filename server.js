@@ -44,7 +44,19 @@ app.use(session({
 }));
 
 // Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+// Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger.
+// Cache court pour HTML/JS/CSS (le site évolue souvent) afin d'éviter qu'un navigateur ne garde
+// une vieille version du JS après un déploiement ; un cache plus long serait envisageable une
+// fois le site stabilisé.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache'); // revalidation systématique, mais réponse 304 si inchangé (rapide, peu de données)
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  },
+}));
 
 // API
 app.use('/api/auth', authRoutes);
