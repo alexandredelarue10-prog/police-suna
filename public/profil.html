@@ -28,6 +28,19 @@
           <button type="submit" class="btn btn-primary">Mettre à jour</button>
         </form>
       </div>
+
+      <div class="card dark-form hidden" id="credits-card" style="margin-top:24px">
+        <h3 style="font-size:1.05rem">Crédits du site (pied de page)</h3>
+        <p class="field-hint" style="margin-bottom:12px">Visible en bas de chaque page. Réservé au compte DEV.</p>
+        <div id="credits-error"></div>
+        <form id="credits-form">
+          <div class="field">
+            <label for="credits-text">Texte des crédits</label>
+            <textarea id="credits-text" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -46,7 +59,27 @@
           <div><strong>Rang ninja</strong><p class="mb-0">${escapeHtml(user.rang_nom || '—')}</p></div>
           <div><strong>Matricule</strong><p class="mb-0">${escapeHtml(user.matricule || '—')}</p></div>
         </div>`;
+
+      if (user.protege) {
+        document.getElementById('credits-card').classList.remove('hidden');
+        try {
+          const { credits } = await api('/settings/credits');
+          document.getElementById('credits-text').value = credits;
+        } catch (_) { /* silencieux */ }
+      }
     })();
+
+    document.getElementById('credits-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('credits-error');
+      errorBox.innerHTML = '';
+      try {
+        await api('/settings/credits', { method: 'PUT', body: { valeur: document.getElementById('credits-text').value } });
+        toast('Crédits mis à jour.');
+      } catch (err) {
+        errorBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    });
 
     document.getElementById('pw-form').addEventListener('submit', async (e) => {
       e.preventDefault();

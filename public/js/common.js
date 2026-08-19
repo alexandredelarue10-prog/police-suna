@@ -167,8 +167,17 @@ function buildNavbar(activeKey) {
 function buildFooter() {
   const footer = document.createElement('footer');
   footer.className = 'site-footer';
-  footer.innerHTML = `<div class="wrap">Village Caché du Sable — Registre officiel de la Force de Police · Document interne</div>`;
+  footer.innerHTML = `
+    <div class="wrap">
+      <div>Village Caché du Sable — Registre officiel de la Force de Police · Document interne</div>
+      <div id="footer-credits" class="footer-credits"></div>
+    </div>`;
   document.body.appendChild(footer);
+
+  api('/settings/credits').then(({ credits }) => {
+    const el = document.getElementById('footer-credits');
+    if (el && credits) el.textContent = credits;
+  }).catch(() => { /* silencieux : les crédits ne sont pas critiques */ });
 }
 
 // key: identifiant de la page active. requireAuth: redirige vers login.html si non connecté.

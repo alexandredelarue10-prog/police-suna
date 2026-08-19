@@ -191,6 +191,14 @@ CREATE TABLE IF NOT EXISTS patrouilles (
 );
 CREATE INDEX IF NOT EXISTS idx_patrouilles_date ON patrouilles(date_service);
 
+-- PARAMÈTRES DU SITE (clé/valeur) : ex. crédits en pied de page, modifiables uniquement par DEV
+CREATE TABLE IF NOT EXISTS site_settings (
+  id SERIAL PRIMARY KEY,
+  cle VARCHAR(60) NOT NULL UNIQUE,
+  valeur TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

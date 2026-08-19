@@ -630,6 +630,11 @@ section > h2 { font-size: 1.4rem; margin-bottom: 20px; }
   font-size: 0.78rem;
   color: rgba(228,211,168,0.55);
 }
+.footer-credits {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: rgba(228,211,168,0.4);
+}
 
 /* ---------- Utilitaires ---------- */
 .muted { color: rgba(228,211,168,0.6); }
