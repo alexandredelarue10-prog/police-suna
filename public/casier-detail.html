@@ -190,6 +190,82 @@
       liberation_conditionnelle: ['Libération conditionnelle', 'badge-muted'],
     };
 
+    // Regroupe les infractions ajoutées ensemble (même groupe_id) dans un seul bandeau,
+    // avec le total des amendes additionné, pour éviter de saturer le casier de petites lignes.
+    function renderInfractionsGrouped(infractions, canManage) {
+      const groups = {};
+      const standalone = [];
+      infractions.forEach((i) => {
+        if (i.groupe_id) {
+          (groups[i.groupe_id] = groups[i.groupe_id] || []).push(i);
+        } else {
+          standalone.push(i);
+        }
+      });
+
+      const blocks = [];
+
+      Object.values(groups).forEach((items) => {
+        const totalAmende = items.reduce((sum, i) => sum + (i.amende_appliquee || 0), 0);
+        const cellules = [...new Set(items.map(i => i.cellule_appliquee).filter(Boolean))];
+        const first = items[0];
+        blocks.push({ sortKey: first.created_at, html: `
+          <div class="card infraction-groupe" style="margin-bottom:14px">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:10px">
+              <div>
+                <span class="badge badge-danger">Infraction multiple · ${items.length} chefs d'accusation</span>
+                <p class="muted" style="font-size:0.8rem; margin:6px 0 0">
+                  ${formatDate(first.date_infraction)} · Enregistré par ${escapeHtml(first.agent_username || 'inconnu')}
+                </p>
+              </div>
+              ${canManage ? `<button class="btn btn-danger btn-sm" data-del-groupe="${first.groupe_id}">Supprimer le groupe</button>` : ''}
+            </div>
+            <ul class="infraction-groupe-list">
+              ${items.map(i => `
+                <li>
+                  <span>${escapeHtml(i.titre)}${i.occurrence_recidive ? ` <span class="badge badge-warn" style="margin-left:4px">${escapeHtml(i.occurrence_recidive)}</span>` : ''}</span>
+                  <span class="flex gap-8" style="align-items:center">
+                    <span class="muted" style="font-size:0.8rem">${i.amende_appliquee ? i.amende_appliquee.toLocaleString('fr-FR') + ' ryō' : '—'}</span>
+                    ${canManage ? `<button class="btn btn-secondary btn-sm" data-del-infraction="${i.id}" style="padding:2px 8px; font-size:0.72rem">✕</button>` : ''}
+                  </span>
+                </li>
+              `).join('')}
+            </ul>
+            <div class="infraction-groupe-total">
+              <span>Total amendes</span>
+              <strong>${totalAmende.toLocaleString('fr-FR')} ryō</strong>
+            </div>
+            ${cellules.length ? `<p class="muted mb-0" style="font-size:0.8rem; margin-top:6px"><strong>Cellule/T.I.G :</strong> ${cellules.map(escapeHtml).join(' · ')}</p>` : ''}
+          </div>
+        `});
+      });
+
+      standalone.forEach((i) => {
+        blocks.push({ sortKey: i.created_at, html: `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="align-items:flex-start">
+              <div>
+                <h3 style="font-size:1rem; margin-bottom:4px">${escapeHtml(i.titre)}</h3>
+                <p class="muted" style="font-size:0.8rem; margin-bottom:8px">
+                  ${formatDate(i.date_infraction)} · Enregistré par ${escapeHtml(i.agent_username || 'inconnu')}
+                </p>
+              </div>
+              ${canManage ? `<button class="btn btn-danger btn-sm" data-del-infraction="${i.id}">Supprimer</button>` : ''}
+            </div>
+            ${i.description ? `<p style="font-size:0.88rem">${escapeHtml(i.description)}</p>` : ''}
+            <p class="mb-0" style="font-size:0.85rem">
+              ${i.amende_appliquee ? `<strong>Amende :</strong> ${i.amende_appliquee.toLocaleString('fr-FR')} ryō &nbsp;` : ''}
+              ${i.cellule_appliquee ? `<strong>Cellule/T.I.G :</strong> ${escapeHtml(i.cellule_appliquee)} &nbsp;` : ''}
+              ${i.occurrence_recidive ? `<span class="badge badge-warn">${escapeHtml(i.occurrence_recidive)} récidive</span>` : ''}
+            </p>
+          </div>
+        `});
+      });
+
+      blocks.sort((a, b) => new Date(b.sortKey) - new Date(a.sortKey));
+      return blocks.map(b => b.html).join('');
+    }
+
     async function loadDetail() {
       const container = document.getElementById('casier-content');
       try {
@@ -226,27 +302,7 @@
           </div>
 
           <div id="infractions-list">
-            ${infractions.length === 0 ? '<div class="empty-state">Aucune infraction enregistrée.</div>' :
-              infractions.map(i => `
-                <div class="card" style="margin-bottom:12px">
-                  <div class="flex-between" style="align-items:flex-start">
-                    <div>
-                      <h3 style="font-size:1rem; margin-bottom:4px">${escapeHtml(i.titre)}</h3>
-                      <p class="muted" style="font-size:0.8rem; margin-bottom:8px">
-                        ${formatDate(i.date_infraction)} · Enregistré par ${escapeHtml(i.agent_username || 'inconnu')}
-                      </p>
-                    </div>
-                    ${canManage ? `<button class="btn btn-danger btn-sm" data-del-infraction="${i.id}">Supprimer</button>` : ''}
-                  </div>
-                  ${i.description ? `<p style="font-size:0.88rem">${escapeHtml(i.description)}</p>` : ''}
-                  <p class="mb-0" style="font-size:0.85rem">
-                    ${i.amende_appliquee ? `<strong>Amende :</strong> ${i.amende_appliquee.toLocaleString('fr-FR')} ryō &nbsp;` : ''}
-                    ${i.cellule_appliquee ? `<strong>Cellule/T.I.G :</strong> ${escapeHtml(i.cellule_appliquee)} &nbsp;` : ''}
-                    ${i.occurrence_recidive ? `<span class="badge badge-warn">${escapeHtml(i.occurrence_recidive)} récidive</span>` : ''}
-                  </p>
-                </div>
-              `).join('')
-            }
+            ${infractions.length === 0 ? '<div class="empty-state">Aucune infraction enregistrée.</div>' : renderInfractionsGrouped(infractions, canManage)}
           </div>
         `;
 
@@ -265,6 +321,9 @@
           });
           document.querySelectorAll('[data-del-infraction]').forEach(btn => {
             btn.addEventListener('click', () => deleteInfraction(btn.dataset.delInfraction));
+          });
+          document.querySelectorAll('[data-del-groupe]').forEach(btn => {
+            btn.addEventListener('click', () => deleteGroupe(btn.dataset.delGroupe));
           });
         }
       } catch (err) {
@@ -305,6 +364,10 @@
       btn.disabled = true;
       btn.textContent = 'Ajout en cours…';
 
+      // Un groupe_id commun n'est attribué que s'il y a plus d'une infraction, pour qu'elles
+      // s'affichent regroupées dans un seul bandeau avec le total des amendes additionné.
+      const groupeId = checked.length > 1 ? `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+
       let successCount = 0;
       let errorCount = 0;
       for (const sanctionId of checked) {
@@ -321,6 +384,7 @@
               cellule_appliquee: s.cellule_tig,
               occurrence_recidive: recidive,
               date_infraction: date,
+              groupe_id: groupeId,
             },
           });
           successCount++;
@@ -346,6 +410,21 @@
       try {
         await api(`/casiers/infractions/${id}`, { method: 'DELETE' });
         toast('Infraction supprimée.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deleteGroupe(groupeId) {
+      if (!confirm('Supprimer tout ce groupe d\'infractions ?')) return;
+      try {
+        const { infractions } = await api(`/casiers/${casierId}`);
+        const ids = infractions.filter(i => i.groupe_id === groupeId).map(i => i.id);
+        for (const id of ids) {
+          await api(`/casiers/infractions/${id}`, { method: 'DELETE' });
+        }
+        toast('Groupe supprimé.');
         loadDetail();
       } catch (err) {
         toast(err.message, 'error');

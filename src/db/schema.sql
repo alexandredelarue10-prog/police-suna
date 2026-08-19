@@ -125,6 +125,9 @@ CREATE TABLE IF NOT EXISTS casiers (
 );
 
 -- INFRACTIONS liées à un casier (une ligne = une sanction appliquée)
+-- groupe_id : quand plusieurs infractions sont ajoutées en une fois (sélection multiple),
+-- elles partagent le même groupe_id afin d'être affichées regroupées dans un seul bandeau
+-- avec le total des amendes additionné, plutôt que de multiplier les entrées séparées.
 CREATE TABLE IF NOT EXISTS casier_infractions (
   id SERIAL PRIMARY KEY,
   casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
@@ -136,8 +139,11 @@ CREATE TABLE IF NOT EXISTS casier_infractions (
   occurrence_recidive VARCHAR(20) DEFAULT '',
   date_infraction DATE NOT NULL DEFAULT CURRENT_DATE,
   agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  groupe_id VARCHAR(40),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE casier_infractions ADD COLUMN IF NOT EXISTS groupe_id VARCHAR(40);
+CREATE INDEX IF NOT EXISTS idx_casier_infractions_groupe ON casier_infractions(groupe_id);
 
 -- ACTUALITÉS / COMMUNIQUÉS (vitrine publique)
 CREATE TABLE IF NOT EXISTS actus (

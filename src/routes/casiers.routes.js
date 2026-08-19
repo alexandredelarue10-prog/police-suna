@@ -192,12 +192,12 @@ router.delete('/:id', requireAuth, requirePermission('peut_gerer_casiers'), asyn
 // POST /api/casiers/:id/infractions — ajouter une infraction au casier
 router.post('/:id/infractions', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
   try {
-    const { sanction_id, titre, description, amende_appliquee, cellule_appliquee, occurrence_recidive, date_infraction } = req.body;
+    const { sanction_id, titre, description, amende_appliquee, cellule_appliquee, occurrence_recidive, date_infraction, groupe_id } = req.body;
     if (!titre) return res.status(400).json({ error: 'Le titre de l\'infraction est requis.' });
 
     const { rows } = await pool.query(
-      `INSERT INTO casier_infractions (casier_id, sanction_id, titre, description, amende_appliquee, cellule_appliquee, occurrence_recidive, date_infraction, agent_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, CURRENT_DATE),$9) RETURNING *`,
+      `INSERT INTO casier_infractions (casier_id, sanction_id, titre, description, amende_appliquee, cellule_appliquee, occurrence_recidive, date_infraction, agent_id, groupe_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, CURRENT_DATE),$9,$10) RETURNING *`,
       [
         req.params.id,
         sanction_id || null,
@@ -208,6 +208,7 @@ router.post('/:id/infractions', requireAuth, requirePermission('peut_gerer_casie
         occurrence_recidive || '',
         date_infraction || null,
         req.session.user.id,
+        groupe_id || null,
       ]
     );
     await pool.query('UPDATE casiers SET updated_at = now() WHERE id = $1', [req.params.id]);
