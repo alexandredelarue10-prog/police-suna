@@ -34,6 +34,7 @@ function buildNavbar(activeKey) {
     espaceLinks = [
       linkHtml('dashboard.html', 'Tableau de bord', 'dashboard'),
       linkHtml('casiers.html', 'Casiers judiciaires', 'casiers'),
+      linkHtml('plaintes.html', 'Dépôts de plainte', 'plaintes'),
       linkHtml('planning.html', 'Planning', 'planning'),
       linkHtml('statistiques.html', 'Statistiques', 'statistiques'),
       linkHtml('profil.html', 'Mon profil', 'profil'),

@@ -199,6 +199,47 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- DÉPÔTS DE PLAINTE : dossier détaillé, entièrement modifiable à tout moment (aucun verrouillage après création)
+CREATE TABLE IF NOT EXISTS plaintes (
+  id SERIAL PRIMARY KEY,
+  numero VARCHAR(20) UNIQUE,
+  plaignant_nom VARCHAR(120) NOT NULL,
+  plaignant_contact VARCHAR(150) DEFAULT '', -- village, adresse, moyen de contact...
+  mis_en_cause_nom VARCHAR(120) DEFAULT '',
+  casier_id INTEGER REFERENCES casiers(id) ON DELETE SET NULL, -- lien optionnel vers un casier existant
+  date_faits DATE,
+  lieu_faits VARCHAR(150) DEFAULT '',
+  description TEXT DEFAULT '', -- récit détaillé des faits
+  statut VARCHAR(30) NOT NULL DEFAULT 'en_cours', -- en_cours | classee_sans_suite | transmise_tribunal | resolue
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plaintes_statut ON plaintes(statut);
+CREATE INDEX IF NOT EXISTS idx_plaintes_updated ON plaintes(updated_at DESC);
+
+-- TÉMOIGNAGES liés à une plainte (plusieurs par plainte)
+CREATE TABLE IF NOT EXISTS plainte_temoignages (
+  id SERIAL PRIMARY KEY,
+  plainte_id INTEGER NOT NULL REFERENCES plaintes(id) ON DELETE CASCADE,
+  nom_temoin VARCHAR(120) NOT NULL,
+  temoignage TEXT DEFAULT '',
+  enregistre_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plainte_temoignages_plainte ON plainte_temoignages(plainte_id);
+
+-- INFRACTIONS visées par une plainte (référence au code pénal, plusieurs possibles, modifiables à tout moment)
+CREATE TABLE IF NOT EXISTS plainte_infractions (
+  id SERIAL PRIMARY KEY,
+  plainte_id INTEGER NOT NULL REFERENCES plaintes(id) ON DELETE CASCADE,
+  sanction_id INTEGER REFERENCES sanctions_types(id) ON DELETE SET NULL,
+  titre VARCHAR(200) NOT NULL,
+  description TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plainte_infractions_plainte ON plainte_infractions(plainte_id);
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

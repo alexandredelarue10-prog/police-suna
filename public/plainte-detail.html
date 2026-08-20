@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dépôt de plainte — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px; max-width:760px">
+      <p><a href="plaintes.html">← Retour aux plaintes</a></p>
+      <div id="content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user, plainteId, isNew, sanctionsCache = [];
+
+    const statutOptions = [
+      ['en_cours', 'En cours'],
+      ['classee_sans_suite', 'Classée sans suite'],
+      ['transmise_tribunal', 'Transmise au tribunal'],
+      ['resolue', 'Résolue'],
+    ];
+
+    (async function () {
+      user = await initLayout({ activeKey: 'plaintes', requireAuth: true });
+      if (!user) return;
+
+      const params = new URLSearchParams(window.location.search);
+      plainteId = params.get('id');
+      isNew = params.get('new') === '1';
+
+      if (!plainteId && !isNew) { window.location.href = 'plaintes.html'; return; }
+      if (!user.permissions.peut_gerer_casiers && isNew) { window.location.href = 'plaintes.html'; return; }
+
+      try {
+        const { sanctions } = await api('/sanctions');
+        sanctionsCache = sanctions.filter(s => s.actif);
+      } catch (_) { /* silencieux */ }
+
+      if (isNew) {
+        renderForm(null);
+      } else {
+        loadDetail();
+      }
+    })();
+
+    function statutSelectHtml(current) {
+      return statutOptions.map(([v, l]) => `<option value="${v}" ${v === current ? 'selected' : ''}>${l}</option>`).join('');
+    }
+
+    function renderForm(plainte) {
+      const container = document.getElementById('content');
+      container.innerHTML = `
+        <div class="card dark-form">
+          <h1 style="margin-top:0">${plainte ? escapeHtml(plainte.numero || 'Plainte') : 'Nouvelle plainte'}</h1>
+          <form id="plainte-form">
+            <div class="field-row">
+              <div class="field">
+                <label for="f-plaignant">Nom du plaignant *</label>
+                <input type="text" id="f-plaignant" required value="${plainte ? escapeHtml(plainte.plaignant_nom) : ''}" />
+              </div>
+              <div class="field">
+                <label for="f-contact">Contact du plaignant</label>
+                <input type="text" id="f-contact" placeholder="Village, adresse…" value="${plainte ? escapeHtml(plainte.plaignant_contact || '') : ''}" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="f-mis-en-cause">Mis en cause</label>
+              <input type="text" id="f-mis-en-cause" placeholder="Nom de la personne visée par la plainte" value="${plainte ? escapeHtml(plainte.mis_en_cause_nom || '') : ''}" />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="f-date">Date des faits</label>
+                <input type="date" id="f-date" value="${plainte && plainte.date_faits ? String(plainte.date_faits).slice(0, 10) : ''}" />
+              </div>
+              <div class="field">
+                <label for="f-lieu">Lieu des faits</label>
+                <input type="text" id="f-lieu" value="${plainte ? escapeHtml(plainte.lieu_faits || '') : ''}" />
+              </div>
+              <div class="field">
+                <label for="f-statut">Statut</label>
+                <select id="f-statut">${statutSelectHtml(plainte ? plainte.statut : 'en_cours')}</select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="f-description">Récit détaillé des faits</label>
+              <textarea id="f-description" rows="6" placeholder="Description complète et détaillée des événements…">${plainte ? escapeHtml(plainte.description || '') : ''}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">${plainte ? 'Enregistrer les modifications' : 'Déposer la plainte'}</button>
+            ${plainte ? `<button type="button" class="btn btn-danger" id="delete-plainte-btn" style="margin-left:8px">Supprimer la plainte</button>` : ''}
+          </form>
+        </div>
+
+        <div id="sections" class="${plainte ? '' : 'hidden'}">
+          <section style="padding:32px 0 12px">
+            <div class="section-head">
+              <h2 class="mb-0" style="font-size:1.1rem">Témoignages</h2>
+              <button class="btn btn-secondary btn-sm" id="add-temoin-btn">+ Ajouter un témoignage</button>
+            </div>
+            <div id="temoignages-list"></div>
+          </section>
+
+          <section style="padding:12px 0">
+            <div class="section-head">
+              <h2 class="mb-0" style="font-size:1.1rem">Infractions visées</h2>
+              <button class="btn btn-secondary btn-sm" id="add-infraction-btn">+ Ajouter des infractions</button>
+            </div>
+            <div id="infractions-list"></div>
+          </section>
+        </div>
+      `;
+
+      document.getElementById('plainte-form').addEventListener('submit', savePlainte);
+      if (plainte) {
+        document.getElementById('delete-plainte-btn').addEventListener('click', deletePlainte);
+        document.getElementById('add-temoin-btn').addEventListener('click', () => openTemoinModal());
+        document.getElementById('add-infraction-btn').addEventListener('click', openInfractionModal);
+      }
+    }
+
+    async function savePlainte(e) {
+      e.preventDefault();
+      const payload = {
+        plaignant_nom: document.getElementById('f-plaignant').value.trim(),
+        plaignant_contact: document.getElementById('f-contact').value.trim(),
+        mis_en_cause_nom: document.getElementById('f-mis-en-cause').value.trim(),
+        date_faits: document.getElementById('f-date').value || null,
+        lieu_faits: document.getElementById('f-lieu').value.trim(),
+        description: document.getElementById('f-description').value.trim(),
+        statut: document.getElementById('f-statut').value,
+      };
+      try {
+        if (plainteId) {
+          await api(`/plaintes/${plainteId}`, { method: 'PUT', body: payload });
+          toast('Plainte mise à jour.');
+          loadDetail();
+        } else {
+          const { plainte } = await api('/plaintes', { method: 'POST', body: payload });
+          toast('Plainte déposée.');
+          window.location.href = `plainte-detail.html?id=${plainte.id}`;
+        }
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deletePlainte() {
+      if (!confirm('Supprimer définitivement cette plainte (témoignages et infractions inclus) ?')) return;
+      try {
+        await api(`/plaintes/${plainteId}`, { method: 'DELETE' });
+        toast('Plainte supprimée.');
+        window.location.href = 'plaintes.html';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function loadDetail() {
+      try {
+        const { plainte, temoignages, infractions } = await api(`/plaintes/${plainteId}`);
+        renderForm(plainte);
+        renderTemoignages(temoignages, user.permissions.peut_gerer_casiers);
+        renderInfractions(infractions, user.permissions.peut_gerer_casiers);
+      } catch (err) {
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    // --- Témoignages ---
+    function renderTemoignages(temoignages, canManage) {
+      const container = document.getElementById('temoignages-list');
+      if (temoignages.length === 0) {
+        container.innerHTML = '<div class="empty-state">Aucun témoignage enregistré.</div>';
+        return;
+      }
+      container.innerHTML = temoignages.map(t => `
+        <div class="card" style="margin-bottom:10px">
+          <div class="flex-between" style="align-items:flex-start">
+            <div>
+              <strong>${escapeHtml(t.nom_temoin)}</strong>
+              <p class="muted mb-0" style="font-size:0.76rem">Enregistré par ${escapeHtml(t.enregistre_par_username || '—')} le ${formatDate(t.created_at)}</p>
+            </div>
+            ${canManage ? `<div class="flex gap-8">
+              <button class="btn btn-secondary btn-sm" data-edit-temoin="${t.id}">Modifier</button>
+              <button class="btn btn-danger btn-sm" data-del-temoin="${t.id}">Suppr.</button>
+            </div>` : ''}
+          </div>
+          ${t.temoignage ? `<p style="font-size:0.88rem; margin-top:8px; white-space:pre-wrap">${escapeHtml(t.temoignage)}</p>` : ''}
+        </div>
+      `).join('');
+
+      if (canManage) {
+        container.querySelectorAll('[data-edit-temoin]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const t = temoignages.find(x => x.id == btn.dataset.editTemoin);
+            openTemoinModal(t);
+          });
+        });
+        container.querySelectorAll('[data-del-temoin]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce témoignage ?')) return;
+            try { await api(`/plaintes/temoignages/${btn.dataset.delTemoin}`, { method: 'DELETE' }); toast('Témoignage supprimé.'); loadDetail(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      }
+    }
+
+    function openTemoinModal(temoin = null) {
+      const nom = prompt('Nom du témoin :', temoin ? temoin.nom_temoin : '');
+      if (nom === null || nom.trim() === '') return;
+      const texte = prompt('Témoignage détaillé :', temoin ? temoin.temoignage : '');
+      if (texte === null) return;
+      saveTemoin(temoin ? temoin.id : null, nom.trim(), texte.trim());
+    }
+
+    async function saveTemoin(id, nom_temoin, temoignage) {
+      try {
+        if (id) {
+          await api(`/plaintes/temoignages/${id}`, { method: 'PUT', body: { nom_temoin, temoignage } });
+          toast('Témoignage mis à jour.');
+        } else {
+          await api(`/plaintes/${plainteId}/temoignages`, { method: 'POST', body: { nom_temoin, temoignage } });
+          toast('Témoignage ajouté.');
+        }
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    // --- Infractions ---
+    function renderInfractions(infractions, canManage) {
+      const container = document.getElementById('infractions-list');
+      if (infractions.length === 0) {
+        container.innerHTML = '<div class="empty-state">Aucune infraction visée pour le moment.</div>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Art.</th><th>Infraction</th>${canManage ? '<th></th>' : ''}</tr></thead>
+            <tbody>
+              ${infractions.map(i => `
+                <tr>
+                  <td style="font-family:var(--font-mono)">${escapeHtml(i.article || '—')}</td>
+                  <td>${escapeHtml(i.titre)}</td>
+                  ${canManage ? `<td><button class="btn btn-danger btn-sm" data-del-infraction="${i.id}">Retirer</button></td>` : ''}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+      if (canManage) {
+        container.querySelectorAll('[data-del-infraction]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Retirer cette infraction de la plainte ?')) return;
+            try { await api(`/plaintes/infractions/${btn.dataset.delInfraction}`, { method: 'DELETE' }); toast('Infraction retirée.'); loadDetail(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      }
+    }
+
+    function openInfractionModal() {
+      if (sanctionsCache.length === 0) { toast('Aucune sanction disponible dans le barème.', 'error'); return; }
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop open';
+      backdrop.innerHTML = `
+        <div class="modal">
+          <h3>Ajouter des infractions</h3>
+          <div id="pi-list" style="max-height:280px; overflow-y:auto; border:1px solid rgba(23,21,15,0.15); border-radius:4px; padding:10px">
+            ${sanctionsCache.map(s => `
+              <label style="display:flex; align-items:flex-start; gap:8px; padding:6px 4px; text-transform:none; font-weight:400; cursor:pointer">
+                <input type="checkbox" class="pi-check" value="${s.id}" style="width:auto; margin-top:3px" />
+                <span style="font-size:0.85rem"><strong>${escapeHtml(s.article || '—')}</strong> — ${escapeHtml(s.nom)}</span>
+              </label>
+            `).join('')}
+          </div>
+          <div class="modal-close-row">
+            <button type="button" class="btn btn-secondary" id="pi-cancel">Annuler</button>
+            <button type="button" class="btn btn-primary" id="pi-submit">Ajouter la sélection</button>
+          </div>
+        </div>`;
+      document.body.appendChild(backdrop);
+
+      backdrop.querySelector('#pi-cancel').addEventListener('click', () => backdrop.remove());
+      backdrop.querySelector('#pi-submit').addEventListener('click', async () => {
+        const checked = [...backdrop.querySelectorAll('.pi-check:checked')].map(c => c.value);
+        if (checked.length === 0) { toast('Sélectionnez au moins une infraction.', 'error'); return; }
+        for (const sid of checked) {
+          const s = sanctionsCache.find(x => String(x.id) === sid);
+          if (!s) continue;
+          try {
+            await api(`/plaintes/${plainteId}/infractions`, {
+              method: 'POST',
+              body: { sanction_id: s.id, titre: s.nom, description: s.description },
+            });
+          } catch (_) { /* on continue malgré une erreur isolée */ }
+        }
+        toast('Infractions ajoutées.');
+        backdrop.remove();
+        loadDetail();
+      });
+    }
+  </script>
+</body>
+</html>

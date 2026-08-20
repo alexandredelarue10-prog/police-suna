@@ -20,6 +20,10 @@ const ACTION_LABELS = {
   alerte_activee: "Code d'alerte activé",
   blame_applique: 'Blâme disciplinaire appliqué',
   patrouille_creee: 'Patrouille planifiée',
+  plainte_deposee: 'Plainte déposée',
+  plainte_modifiee: 'Plainte modifiée',
+  plainte_supprimee: 'Plainte supprimée',
+  credits_modifies: 'Crédits du site modifiés',
 };
 
 // GET /api/journal — réservé aux hauts gradés habilités à valider les comptes

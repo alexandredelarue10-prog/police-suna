@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dépôts de plainte — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Dépôts de plainte</h1>
+          <p class="muted">Registre des plaintes déposées, avec témoignages et infractions visées.</p>
+        </div>
+        <button class="btn btn-primary hidden" id="new-btn">+ Déposer une plainte</button>
+      </div>
+
+      <div class="field-row" style="max-width:520px; margin-bottom:24px; flex-wrap:wrap">
+        <div class="field" style="min-width:220px">
+          <input type="text" id="search-input" placeholder="Rechercher plaignant, mis en cause, n°…" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+        </div>
+        <div class="field" style="max-width:200px">
+          <select id="filter-statut" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)">
+            <option value="">Tous les statuts</option>
+            <option value="en_cours">En cours</option>
+            <option value="classee_sans_suite">Classée sans suite</option>
+            <option value="transmise_tribunal">Transmise au tribunal</option>
+            <option value="resolue">Résolue</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="plaintes-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const statutLabels = {
+      en_cours: ['En cours', 'badge-warn'],
+      classee_sans_suite: ['Classée sans suite', 'badge-muted'],
+      transmise_tribunal: ['Transmise au tribunal', 'badge-danger'],
+      resolue: ['Résolue', 'badge-ok'],
+    };
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'plaintes', requireAuth: true });
+      if (!user) return;
+      if (user.permissions.peut_gerer_casiers) {
+        document.getElementById('new-btn').classList.remove('hidden');
+        document.getElementById('new-btn').addEventListener('click', () => {
+          window.location.href = 'plainte-detail.html?new=1';
+        });
+      }
+
+      loadPlaintes();
+      let timer;
+      const trigger = () => { clearTimeout(timer); timer = setTimeout(loadPlaintes, 250); };
+      document.getElementById('search-input').addEventListener('input', trigger);
+      document.getElementById('filter-statut').addEventListener('change', trigger);
+    })();
+
+    async function loadPlaintes() {
+      const grid = document.getElementById('plaintes-grid');
+      const q = document.getElementById('search-input').value;
+      const statut = document.getElementById('filter-statut').value;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (statut) params.set('statut', statut);
+      try {
+        const { plaintes } = await api('/plaintes' + (params.toString() ? `?${params}` : ''));
+        if (plaintes.length === 0) {
+          grid.innerHTML = '<div class="empty-state">Aucune plainte trouvée.</div>';
+          return;
+        }
+        grid.innerHTML = plaintes.map(p => {
+          const [label, cls] = statutLabels[p.statut] || ['Inconnu', 'badge-muted'];
+          return `
+            <a href="plainte-detail.html?id=${p.id}" class="dossier" data-tab="${escapeHtml(p.numero || 'Plainte')}">
+              <span class="badge ${cls}">${label}</span>
+              <h3>${escapeHtml(p.plaignant_nom)}</h3>
+              ${p.mis_en_cause_nom ? `<div class="meta">contre ${escapeHtml(p.mis_en_cause_nom)}</div>` : '<div class="meta">Mis en cause non identifié</div>'}
+              <div class="meta">${p.date_faits ? formatDate(p.date_faits) : 'Date non précisée'}</div>
+              <div class="meta" style="margin-top:6px">
+                ${p.nb_temoignages > 0 ? `<span class="badge badge-muted">${p.nb_temoignages} témoin${p.nb_temoignages > 1 ? 's' : ''}</span> ` : ''}
+                ${p.nb_infractions > 0 ? `<span class="badge badge-muted">${p.nb_infractions} infraction${p.nb_infractions > 1 ? 's' : ''}</span>` : ''}
+              </div>
+            </a>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
