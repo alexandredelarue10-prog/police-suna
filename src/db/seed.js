@@ -232,6 +232,24 @@ async function run() {
     );
   }
 
+  // --- Resynchronisation de la séquence des matricules ---
+  // Garantit que la séquence est toujours au moins égale au plus haut matricule déjà utilisé,
+  // pour ne jamais générer de doublon (ex : après suppression de comptes intermédiaires).
+  await pool.query(`
+    SELECT setval('matricule_seq', GREATEST(
+      (SELECT COALESCE(MAX(CAST(substring(matricule FROM 6) AS INTEGER)), 0) FROM users WHERE matricule ~ '^SUNA-[0-9]+$'),
+      (SELECT last_value FROM matricule_seq)
+    ))
+  `);
+
+  // --- Resynchronisation de la séquence des numéros de plainte (même logique) ---
+  await pool.query(`
+    SELECT setval('plainte_numero_seq', GREATEST(
+      (SELECT COALESCE(MAX(CAST(substring(numero FROM 4) AS INTEGER)), 0) FROM plaintes WHERE numero ~ '^PL-[0-9]+$'),
+      (SELECT last_value FROM plainte_numero_seq)
+    ))
+  `);
+
   console.log('[seed] Terminé.');
 }
 

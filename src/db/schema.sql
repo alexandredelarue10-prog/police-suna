@@ -240,6 +240,23 @@ CREATE TABLE IF NOT EXISTS plainte_infractions (
 );
 CREATE INDEX IF NOT EXISTS idx_plainte_infractions_plainte ON plainte_infractions(plainte_id);
 
+-- NOTES INTERNES sur un casier (commentaires libres entre agents, distincts des infractions officielles)
+CREATE TABLE IF NOT EXISTS casier_notes (
+  id SERIAL PRIMARY KEY,
+  casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
+  auteur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  contenu TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_casier_notes_casier ON casier_notes(casier_id);
+
+-- Séquence dédiée aux matricules : indépendante du COUNT(*) des utilisateurs pour ne jamais
+-- entrer en collision, même après suppression de comptes (contrairement à COUNT(*)+1).
+CREATE SEQUENCE IF NOT EXISTS matricule_seq START 1;
+
+-- Séquence dédiée aux numéros de plainte, même logique de sécurité.
+CREATE SEQUENCE IF NOT EXISTS plainte_numero_seq START 1;
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

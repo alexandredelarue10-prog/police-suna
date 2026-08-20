@@ -75,8 +75,8 @@ router.post('/', requireAuth, requirePermission('peut_gerer_casiers'), async (re
     const { plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut } = req.body;
     if (!plaignant_nom) return res.status(400).json({ error: 'Le nom du plaignant est requis.' });
 
-    const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS n FROM plaintes');
-    const numero = `PL-${String(countRows[0].n + 1).padStart(4, '0')}`;
+    const { rows: seqRows } = await pool.query("SELECT nextval('plainte_numero_seq') AS n");
+    const numero = `PL-${String(seqRows[0].n).padStart(4, '0')}`;
 
     const { rows } = await pool.query(
       `INSERT INTO plaintes (numero, plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut, agent_id)

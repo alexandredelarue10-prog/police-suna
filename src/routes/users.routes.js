@@ -53,9 +53,9 @@ router.post('/:id/approve', requireAuth, requirePermission('peut_valider_comptes
     const check = await assertGradeAssignable(grade_id);
     if (!check.ok) return res.status(403).json({ error: check.error });
 
-    // Génère un matricule simple si absent
-    const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
-    const matricule = `SUNA-${String(countRows[0].n + 1).padStart(4, '0')}`;
+    // Génère un matricule via la séquence dédiée (jamais de collision, même après suppression de comptes)
+    const { rows: seqRows } = await pool.query("SELECT nextval('matricule_seq') AS n");
+    const matricule = `SUNA-${String(seqRows[0].n).padStart(4, '0')}`;
 
     const { rows } = await pool.query(
       `UPDATE users SET statut = 'approuve', grade_id = $1, rang_id = $2, brigade = COALESCE($3, brigade),

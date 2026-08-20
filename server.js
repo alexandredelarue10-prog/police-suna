@@ -11,6 +11,7 @@ const usersRoutes = require('./src/routes/users.routes');
 const gradesRoutes = require('./src/routes/grades.routes');
 const sanctionsRoutes = require('./src/routes/sanctions.routes');
 const casiersRoutes = require('./src/routes/casiers.routes');
+const casierNotesRoutes = require('./src/routes/casier-notes.routes');
 const newsRoutes = require('./src/routes/news.routes');
 const blamesRoutes = require('./src/routes/blames.routes');
 const recidivesRoutes = require('./src/routes/recidives.routes');
@@ -66,6 +67,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/grades', gradesRoutes);
 app.use('/api/sanctions', sanctionsRoutes);
 app.use('/api/casiers', casiersRoutes);
+app.use('/api/casiers', casierNotesRoutes); // ajoute /:id/notes et /notes/:noteId sous /api/casiers
 app.use('/api/actus', newsRoutes);
 app.use('/api/blames', blamesRoutes);
 app.use('/api/recidives', recidivesRoutes);
