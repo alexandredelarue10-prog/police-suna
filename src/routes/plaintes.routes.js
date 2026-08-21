@@ -5,7 +5,18 @@ const { logActivity } = require('../utils/activityLog');
 
 const router = express.Router();
 
-// GET /api/plaintes — liste avec recherche + filtre statut
+// Un utilisateur peut VOIR une plainte si : elle n'est pas privée, ou s'il en est le créateur,
+// ou s'il a la permission "peut_valider_comptes" (Gérant et plus).
+function canView(plainte, user) {
+  return !plainte.prive || plainte.agent_id === user.id || user.permissions.peut_valider_comptes;
+}
+// Un utilisateur peut GÉRER (modifier/supprimer/ajouter témoignages ou infractions) une plainte
+// si et seulement s'il en est le créateur, ou s'il a la permission "peut_valider_comptes".
+function canManage(plainte, user) {
+  return plainte.agent_id === user.id || user.permissions.peut_valider_comptes;
+}
+
+// GET /api/plaintes — liste avec recherche + filtre statut ; les plaintes privées des autres sont masquées
 router.get('/', requireAuth, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
@@ -20,6 +31,13 @@ router.get('/', requireAuth, async (req, res) => {
       i++;
     }
     if (statut) { conditions.push(`statut = $${i}`); params.push(statut); i++; }
+
+    // Un Gérant+ voit tout ; les autres ne voient que le public + leurs propres plaintes privées.
+    if (!req.session.user.permissions.peut_valider_comptes) {
+      conditions.push(`(prive = FALSE OR agent_id = $${i})`);
+      params.push(req.session.user.id);
+      i++;
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(
@@ -48,6 +66,11 @@ router.get('/:id', requireAuth, async (req, res) => {
       [req.params.id]
     );
     if (plainteRows.length === 0) return res.status(404).json({ error: 'Plainte introuvable.' });
+    const plainte = plainteRows[0];
+
+    if (!canView(plainte, req.session.user)) {
+      return res.status(403).json({ error: 'Cette plainte est privée.' });
+    }
 
     const { rows: temoignages } = await pool.query(
       `SELECT t.*, u.username AS enregistre_par_username FROM plainte_temoignages t
@@ -62,25 +85,30 @@ router.get('/:id', requireAuth, async (req, res) => {
       [req.params.id]
     );
 
-    res.json({ plainte: plainteRows[0], temoignages, infractions });
+    res.json({
+      plainte,
+      temoignages,
+      infractions,
+      peut_gerer: canManage(plainte, req.session.user),
+    });
   } catch (err) {
     console.error('[plaintes/detail]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });
 
-// POST /api/plaintes — déposer une nouvelle plainte
-router.post('/', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+// POST /api/plaintes — déposer une nouvelle plainte : ouvert à tout membre approuvé
+router.post('/', requireAuth, async (req, res) => {
   try {
-    const { plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut } = req.body;
+    const { plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut, prive } = req.body;
     if (!plaignant_nom) return res.status(400).json({ error: 'Le nom du plaignant est requis.' });
 
     const { rows: seqRows } = await pool.query("SELECT nextval('plainte_numero_seq') AS n");
     const numero = `PL-${String(seqRows[0].n).padStart(4, '0')}`;
 
     const { rows } = await pool.query(
-      `INSERT INTO plaintes (numero, plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut, agent_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO plaintes (numero, plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut, agent_id, prive)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
         numero,
         plaignant_nom,
@@ -92,10 +120,11 @@ router.post('/', requireAuth, requirePermission('peut_gerer_casiers'), async (re
         description || '',
         statut || 'en_cours',
         req.session.user.id,
+        !!prive,
       ]
     );
 
-    await logActivity(req.session.user.id, req.session.user.username, 'plainte_deposee', `${numero} — plaignant ${plaignant_nom}`);
+    await logActivity(req.session.user.id, req.session.user.username, 'plainte_deposee', `${numero}${prive ? ' (privée)' : ''} — plaignant ${plaignant_nom}`);
 
     res.status(201).json({ plainte: rows[0] });
   } catch (err) {
@@ -104,16 +133,22 @@ router.post('/', requireAuth, requirePermission('peut_gerer_casiers'), async (re
   }
 });
 
-// PUT /api/plaintes/:id — modifiable à tout moment, sans restriction de statut
-router.put('/:id', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+// PUT /api/plaintes/:id — réservé au créateur ou à un Gérant+, modifiable à tout moment
+router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const { plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut } = req.body;
+    const { rows: existingRows } = await pool.query('SELECT agent_id, prive FROM plaintes WHERE id = $1', [req.params.id]);
+    if (existingRows.length === 0) return res.status(404).json({ error: 'Plainte introuvable.' });
+    if (!canManage(existingRows[0], req.session.user)) {
+      return res.status(403).json({ error: 'Vous ne pouvez pas modifier cette plainte.' });
+    }
+
+    const { plaignant_nom, plaignant_contact, mis_en_cause_nom, casier_id, date_faits, lieu_faits, description, statut, prive } = req.body;
     if (!plaignant_nom) return res.status(400).json({ error: 'Le nom du plaignant est requis.' });
 
     const { rows } = await pool.query(
       `UPDATE plaintes SET plaignant_nom=$1, plaignant_contact=$2, mis_en_cause_nom=$3, casier_id=$4,
-              date_faits=$5, lieu_faits=$6, description=$7, statut=$8, updated_at=now()
-       WHERE id=$9 RETURNING *`,
+              date_faits=$5, lieu_faits=$6, description=$7, statut=$8, prive=$9, updated_at=now()
+       WHERE id=$10 RETURNING *`,
       [
         plaignant_nom,
         plaignant_contact || '',
@@ -123,10 +158,10 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_casiers'), async (
         lieu_faits || '',
         description || '',
         statut || 'en_cours',
+        !!prive,
         req.params.id,
       ]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Plainte introuvable.' });
 
     await logActivity(req.session.user.id, req.session.user.username, 'plainte_modifiee', `${rows[0].numero} modifiée`);
 
@@ -137,25 +172,39 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_casiers'), async (
   }
 });
 
-// DELETE /api/plaintes/:id
-router.delete('/:id', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+// DELETE /api/plaintes/:id — réservé au créateur ou à un Gérant+
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('DELETE FROM plaintes WHERE id = $1 RETURNING numero', [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Plainte introuvable.' });
+    const { rows: existingRows } = await pool.query('SELECT agent_id, prive, numero FROM plaintes WHERE id = $1', [req.params.id]);
+    if (existingRows.length === 0) return res.status(404).json({ error: 'Plainte introuvable.' });
+    if (!canManage(existingRows[0], req.session.user)) {
+      return res.status(403).json({ error: 'Vous ne pouvez pas supprimer cette plainte.' });
+    }
 
-    await logActivity(req.session.user.id, req.session.user.username, 'plainte_supprimee', `${rows[0].numero} supprimée`);
+    await pool.query('DELETE FROM plaintes WHERE id = $1', [req.params.id]);
 
-    res.json({ message: `Plainte ${rows[0].numero} supprimée.` });
+    await logActivity(req.session.user.id, req.session.user.username, 'plainte_supprimee', `${existingRows[0].numero} supprimée`);
+
+    res.json({ message: `Plainte ${existingRows[0].numero} supprimée.` });
   } catch (err) {
     console.error('[plaintes/delete]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });
 
-// --- Témoignages ---
+// --- Témoignages (réservé au créateur de la plainte ou à un Gérant+) ---
 
-router.post('/:id/temoignages', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+async function loadPlainteForCheck(plainteId) {
+  const { rows } = await pool.query('SELECT id, agent_id, prive FROM plaintes WHERE id = $1', [plainteId]);
+  return rows[0] || null;
+}
+
+router.post('/:id/temoignages', requireAuth, async (req, res) => {
   try {
+    const plainte = await loadPlainteForCheck(req.params.id);
+    if (!plainte) return res.status(404).json({ error: 'Plainte introuvable.' });
+    if (!canManage(plainte, req.session.user)) return res.status(403).json({ error: 'Accès refusé à cette plainte.' });
+
     const { nom_temoin, temoignage } = req.body;
     if (!nom_temoin) return res.status(400).json({ error: 'Le nom du témoin est requis.' });
 
@@ -172,8 +221,13 @@ router.post('/:id/temoignages', requireAuth, requirePermission('peut_gerer_casie
   }
 });
 
-router.put('/temoignages/:temoignageId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+router.put('/temoignages/:temoignageId', requireAuth, async (req, res) => {
   try {
+    const { rows: tRows } = await pool.query('SELECT plainte_id FROM plainte_temoignages WHERE id = $1', [req.params.temoignageId]);
+    if (tRows.length === 0) return res.status(404).json({ error: 'Témoignage introuvable.' });
+    const plainte = await loadPlainteForCheck(tRows[0].plainte_id);
+    if (!plainte || !canManage(plainte, req.session.user)) return res.status(403).json({ error: 'Accès refusé à cette plainte.' });
+
     const { nom_temoin, temoignage } = req.body;
     if (!nom_temoin) return res.status(400).json({ error: 'Le nom du témoin est requis.' });
 
@@ -181,7 +235,6 @@ router.put('/temoignages/:temoignageId', requireAuth, requirePermission('peut_ge
       `UPDATE plainte_temoignages SET nom_temoin=$1, temoignage=$2 WHERE id=$3 RETURNING *`,
       [nom_temoin, temoignage || '', req.params.temoignageId]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Témoignage introuvable.' });
     res.json({ temoignage: rows[0] });
   } catch (err) {
     console.error('[plaintes/temoignages/update]', err);
@@ -189,10 +242,14 @@ router.put('/temoignages/:temoignageId', requireAuth, requirePermission('peut_ge
   }
 });
 
-router.delete('/temoignages/:temoignageId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+router.delete('/temoignages/:temoignageId', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('DELETE FROM plainte_temoignages WHERE id = $1 RETURNING id', [req.params.temoignageId]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Témoignage introuvable.' });
+    const { rows: tRows } = await pool.query('SELECT plainte_id FROM plainte_temoignages WHERE id = $1', [req.params.temoignageId]);
+    if (tRows.length === 0) return res.status(404).json({ error: 'Témoignage introuvable.' });
+    const plainte = await loadPlainteForCheck(tRows[0].plainte_id);
+    if (!plainte || !canManage(plainte, req.session.user)) return res.status(403).json({ error: 'Accès refusé à cette plainte.' });
+
+    await pool.query('DELETE FROM plainte_temoignages WHERE id = $1', [req.params.temoignageId]);
     res.json({ message: 'Témoignage supprimé.' });
   } catch (err) {
     console.error('[plaintes/temoignages/delete]', err);
@@ -200,10 +257,14 @@ router.delete('/temoignages/:temoignageId', requireAuth, requirePermission('peut
   }
 });
 
-// --- Infractions visées par la plainte ---
+// --- Infractions visées par la plainte (mêmes règles d'accès) ---
 
-router.post('/:id/infractions', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+router.post('/:id/infractions', requireAuth, async (req, res) => {
   try {
+    const plainte = await loadPlainteForCheck(req.params.id);
+    if (!plainte) return res.status(404).json({ error: 'Plainte introuvable.' });
+    if (!canManage(plainte, req.session.user)) return res.status(403).json({ error: 'Accès refusé à cette plainte.' });
+
     const { sanction_id, titre, description } = req.body;
     if (!titre) return res.status(400).json({ error: "Le titre de l'infraction est requis." });
 
@@ -219,10 +280,14 @@ router.post('/:id/infractions', requireAuth, requirePermission('peut_gerer_casie
   }
 });
 
-router.delete('/infractions/:infractionId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+router.delete('/infractions/:infractionId', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('DELETE FROM plainte_infractions WHERE id = $1 RETURNING id', [req.params.infractionId]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Infraction introuvable.' });
+    const { rows: iRows } = await pool.query('SELECT plainte_id FROM plainte_infractions WHERE id = $1', [req.params.infractionId]);
+    if (iRows.length === 0) return res.status(404).json({ error: 'Infraction introuvable.' });
+    const plainte = await loadPlainteForCheck(iRows[0].plainte_id);
+    if (!plainte || !canManage(plainte, req.session.user)) return res.status(403).json({ error: 'Accès refusé à cette plainte.' });
+
+    await pool.query('DELETE FROM plainte_infractions WHERE id = $1', [req.params.infractionId]);
     res.json({ message: 'Infraction retirée.' });
   } catch (err) {
     console.error('[plaintes/infractions/delete]', err);

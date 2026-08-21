@@ -211,10 +211,12 @@ CREATE TABLE IF NOT EXISTS plaintes (
   lieu_faits VARCHAR(150) DEFAULT '',
   description TEXT DEFAULT '', -- récit détaillé des faits
   statut VARCHAR(30) NOT NULL DEFAULT 'en_cours', -- en_cours | classee_sans_suite | transmise_tribunal | resolue
-  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- créateur de la plainte
+  prive BOOLEAN NOT NULL DEFAULT FALSE, -- si vrai : visible uniquement par le créateur et les Gérant+ (peut_valider_comptes)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE plaintes ADD COLUMN IF NOT EXISTS prive BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_plaintes_statut ON plaintes(statut);
 CREATE INDEX IF NOT EXISTS idx_plaintes_updated ON plaintes(updated_at DESC);
 

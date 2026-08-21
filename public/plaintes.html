@@ -49,12 +49,10 @@
     (async function () {
       const user = await initLayout({ activeKey: 'plaintes', requireAuth: true });
       if (!user) return;
-      if (user.permissions.peut_gerer_casiers) {
-        document.getElementById('new-btn').classList.remove('hidden');
-        document.getElementById('new-btn').addEventListener('click', () => {
-          window.location.href = 'plainte-detail.html?new=1';
-        });
-      }
+      document.getElementById('new-btn').classList.remove('hidden');
+      document.getElementById('new-btn').addEventListener('click', () => {
+        window.location.href = 'plainte-detail.html?new=1';
+      });
 
       loadPlaintes();
       let timer;
@@ -81,6 +79,7 @@
           return `
             <a href="plainte-detail.html?id=${p.id}" class="dossier" data-tab="${escapeHtml(p.numero || 'Plainte')}">
               <span class="badge ${cls}">${label}</span>
+              ${p.prive ? '<span class="badge badge-danger" style="margin-left:4px">Privée</span>' : ''}
               <h3>${escapeHtml(p.plaignant_nom)}</h3>
               ${p.mis_en_cause_nom ? `<div class="meta">contre ${escapeHtml(p.mis_en_cause_nom)}</div>` : '<div class="meta">Mis en cause non identifié</div>'}
               <div class="meta">${p.date_faits ? formatDate(p.date_faits) : 'Date non précisée'}</div>

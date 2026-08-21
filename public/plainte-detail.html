@@ -35,7 +35,6 @@
       isNew = params.get('new') === '1';
 
       if (!plainteId && !isNew) { window.location.href = 'plaintes.html'; return; }
-      if (!user.permissions.peut_gerer_casiers && isNew) { window.location.href = 'plaintes.html'; return; }
 
       try {
         const { sanctions } = await api('/sanctions');
@@ -43,7 +42,7 @@
       } catch (_) { /* silencieux */ }
 
       if (isNew) {
-        renderForm(null);
+        renderForm(null, true);
       } else {
         loadDetail();
       }
@@ -53,46 +52,54 @@
       return statutOptions.map(([v, l]) => `<option value="${v}" ${v === current ? 'selected' : ''}>${l}</option>`).join('');
     }
 
-    function renderForm(plainte) {
+    function renderForm(plainte, canManage) {
       const container = document.getElementById('content');
+      const ro = canManage ? '' : 'disabled';
       container.innerHTML = `
         <div class="card dark-form">
           <h1 style="margin-top:0">${plainte ? escapeHtml(plainte.numero || 'Plainte') : 'Nouvelle plainte'}</h1>
           <form id="plainte-form">
+            ${!canManage ? '<div class="alert alert-info">Lecture seule : seul le créateur ou un Gérant et plus peut modifier cette plainte.</div>' : ''}
             <div class="field-row">
               <div class="field">
                 <label for="f-plaignant">Nom du plaignant *</label>
-                <input type="text" id="f-plaignant" required value="${plainte ? escapeHtml(plainte.plaignant_nom) : ''}" />
+                <input type="text" id="f-plaignant" required value="${plainte ? escapeHtml(plainte.plaignant_nom) : ''}" ${ro} />
               </div>
               <div class="field">
                 <label for="f-contact">Contact du plaignant</label>
-                <input type="text" id="f-contact" placeholder="Village, adresse…" value="${plainte ? escapeHtml(plainte.plaignant_contact || '') : ''}" />
+                <input type="text" id="f-contact" placeholder="Village, adresse…" value="${plainte ? escapeHtml(plainte.plaignant_contact || '') : ''}" ${ro} />
               </div>
             </div>
             <div class="field">
               <label for="f-mis-en-cause">Mis en cause</label>
-              <input type="text" id="f-mis-en-cause" placeholder="Nom de la personne visée par la plainte" value="${plainte ? escapeHtml(plainte.mis_en_cause_nom || '') : ''}" />
+              <input type="text" id="f-mis-en-cause" placeholder="Nom de la personne visée par la plainte" value="${plainte ? escapeHtml(plainte.mis_en_cause_nom || '') : ''}" ${ro} />
             </div>
             <div class="field-row">
               <div class="field">
                 <label for="f-date">Date des faits</label>
-                <input type="date" id="f-date" value="${plainte && plainte.date_faits ? String(plainte.date_faits).slice(0, 10) : ''}" />
+                <input type="date" id="f-date" value="${plainte && plainte.date_faits ? String(plainte.date_faits).slice(0, 10) : ''}" ${ro} />
               </div>
               <div class="field">
                 <label for="f-lieu">Lieu des faits</label>
-                <input type="text" id="f-lieu" value="${plainte ? escapeHtml(plainte.lieu_faits || '') : ''}" />
+                <input type="text" id="f-lieu" value="${plainte ? escapeHtml(plainte.lieu_faits || '') : ''}" ${ro} />
               </div>
               <div class="field">
                 <label for="f-statut">Statut</label>
-                <select id="f-statut">${statutSelectHtml(plainte ? plainte.statut : 'en_cours')}</select>
+                <select id="f-statut" ${ro}>${statutSelectHtml(plainte ? plainte.statut : 'en_cours')}</select>
               </div>
             </div>
             <div class="field">
               <label for="f-description">Récit détaillé des faits</label>
-              <textarea id="f-description" rows="6" placeholder="Description complète et détaillée des événements…">${plainte ? escapeHtml(plainte.description || '') : ''}</textarea>
+              <textarea id="f-description" rows="6" placeholder="Description complète et détaillée des événements…" ${ro}>${plainte ? escapeHtml(plainte.description || '') : ''}</textarea>
             </div>
-            <button type="submit" class="btn btn-primary">${plainte ? 'Enregistrer les modifications' : 'Déposer la plainte'}</button>
-            ${plainte ? `<button type="button" class="btn btn-danger" id="delete-plainte-btn" style="margin-left:8px">Supprimer la plainte</button>` : ''}
+            <div class="field">
+              <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+                <input type="checkbox" id="f-prive" style="width:auto" ${plainte && plainte.prive ? 'checked' : ''} ${ro} />
+                Plainte privée (visible uniquement par vous et les Gérant et plus)
+              </label>
+            </div>
+            ${canManage ? `<button type="submit" class="btn btn-primary">${plainte ? 'Enregistrer les modifications' : 'Déposer la plainte'}</button>` : ''}
+            ${plainte && canManage ? `<button type="button" class="btn btn-danger" id="delete-plainte-btn" style="margin-left:8px">Supprimer la plainte</button>` : ''}
           </form>
         </div>
 
@@ -100,7 +107,7 @@
           <section style="padding:32px 0 12px">
             <div class="section-head">
               <h2 class="mb-0" style="font-size:1.1rem">Témoignages</h2>
-              <button class="btn btn-secondary btn-sm" id="add-temoin-btn">+ Ajouter un témoignage</button>
+              ${canManage ? '<button class="btn btn-secondary btn-sm" id="add-temoin-btn">+ Ajouter un témoignage</button>' : ''}
             </div>
             <div id="temoignages-list"></div>
           </section>
@@ -108,18 +115,24 @@
           <section style="padding:12px 0">
             <div class="section-head">
               <h2 class="mb-0" style="font-size:1.1rem">Infractions visées</h2>
-              <button class="btn btn-secondary btn-sm" id="add-infraction-btn">+ Ajouter des infractions</button>
+              ${canManage ? '<button class="btn btn-secondary btn-sm" id="add-infraction-btn">+ Ajouter des infractions</button>' : ''}
             </div>
             <div id="infractions-list"></div>
           </section>
         </div>
       `;
 
-      document.getElementById('plainte-form').addEventListener('submit', savePlainte);
-      if (plainte) {
-        document.getElementById('delete-plainte-btn').addEventListener('click', deletePlainte);
-        document.getElementById('add-temoin-btn').addEventListener('click', () => openTemoinModal());
-        document.getElementById('add-infraction-btn').addEventListener('click', openInfractionModal);
+      document.getElementById('plainte-form').addEventListener('submit', (e) => {
+        if (!canManage) { e.preventDefault(); return; }
+        savePlainte(e);
+      });
+      if (plainte && canManage) {
+        const delBtn = document.getElementById('delete-plainte-btn');
+        if (delBtn) delBtn.addEventListener('click', deletePlainte);
+        const addTemoinBtn = document.getElementById('add-temoin-btn');
+        if (addTemoinBtn) addTemoinBtn.addEventListener('click', () => openTemoinModal());
+        const addInfractionBtn = document.getElementById('add-infraction-btn');
+        if (addInfractionBtn) addInfractionBtn.addEventListener('click', openInfractionModal);
       }
     }
 
@@ -133,6 +146,7 @@
         lieu_faits: document.getElementById('f-lieu').value.trim(),
         description: document.getElementById('f-description').value.trim(),
         statut: document.getElementById('f-statut').value,
+        prive: document.getElementById('f-prive').checked,
       };
       try {
         if (plainteId) {
@@ -162,10 +176,10 @@
 
     async function loadDetail() {
       try {
-        const { plainte, temoignages, infractions } = await api(`/plaintes/${plainteId}`);
-        renderForm(plainte);
-        renderTemoignages(temoignages, user.permissions.peut_gerer_casiers);
-        renderInfractions(infractions, user.permissions.peut_gerer_casiers);
+        const { plainte, temoignages, infractions, peut_gerer } = await api(`/plaintes/${plainteId}`);
+        renderForm(plainte, peut_gerer);
+        renderTemoignages(temoignages, peut_gerer);
+        renderInfractions(infractions, peut_gerer);
       } catch (err) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       }

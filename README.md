@@ -33,6 +33,11 @@ lourd) pour rester très léger en consommation de données et en ressources ser
 - **Rangs ninja modulables** : comme les grades, les rangs (Genin, Chûnin, Kakunin, TKJ, Jônin…)
   sont gérables depuis `/admin-rangs.html` — création, modification, suppression, sans toucher
   au code.
+- **Dépôts de plainte** (`/plaintes.html`) : ouvert à tout membre approuvé (pas besoin de
+  permission spéciale). Fiche détaillée (plaignant, mis en cause, faits, statut), témoignages
+  multiples éditables à tout moment, infractions liées au code pénal. Une plainte peut être
+  marquée **privée** : elle reste alors invisible aux autres membres, mais toujours consultable
+  par son créateur et par les Gérant et plus (`peut_valider_comptes`).
 - **Journal d'activité** : historique des actions administratives (validations de compte,
   changements de grade/rang, modifications du code pénal, casiers créés/supprimés, blâmes
   appliqués, activation d'un code d'alerte…), consultable sur `/journal.html`.
