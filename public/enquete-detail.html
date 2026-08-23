@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dossier d'enquête — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px; max-width:760px">
+      <p><a href="enquetes.html">← Retour aux enquêtes</a></p>
+      <div id="content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let enqueteId;
+    const statutOptions = [['ouverte', 'Ouverte'], ['en_cours', 'En cours'], ['cloturee', 'Clôturée']];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'enquetes', requireAuth: true });
+      if (!user || !user.poles.includes('Enquête')) { window.location.href = 'dashboard.html'; return; }
+      enqueteId = new URLSearchParams(window.location.search).get('id');
+      if (!enqueteId) { window.location.href = 'enquetes.html'; return; }
+      loadDetail();
+    })();
+
+    async function loadDetail() {
+      try {
+        const { enquete, casiers, plaintes } = await api(`/enquetes/${enqueteId}`);
+        render(enquete, casiers, plaintes);
+      } catch (err) {
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function render(enquete, casiers, plaintes) {
+      document.getElementById('content').innerHTML = `
+        <div class="card dark-form">
+          <h1 style="margin-top:0">${escapeHtml(enquete.numero)}</h1>
+          <form id="e-form">
+            <div class="field">
+              <label for="e-titre">Titre *</label>
+              <input type="text" id="e-titre" required value="${escapeHtml(enquete.titre)}" />
+            </div>
+            <div class="field">
+              <label for="e-description">Description</label>
+              <textarea id="e-description" rows="5">${escapeHtml(enquete.description || '')}</textarea>
+            </div>
+            <div class="field">
+              <label for="e-statut">Statut</label>
+              <select id="e-statut">${statutOptions.map(([v, l]) => `<option value="${v}" ${v === enquete.statut ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            </div>
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <button type="button" class="btn btn-danger" id="delete-btn" style="margin-left:8px">Supprimer le dossier</button>
+          </form>
+        </div>
+
+        <section style="padding:28px 0 12px">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Casiers liés</h2>
+            <button class="btn btn-secondary btn-sm" id="link-casier-btn">+ Lier un casier</button>
+          </div>
+          <div id="casiers-list">
+            ${casiers.length === 0 ? '<div class="empty-state">Aucun casier lié.</div>' : casiers.map(c => `
+              <div class="flex-between" style="padding:8px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                <a href="casier-detail.html?id=${c.id}">${escapeHtml(c.nom)} ${escapeHtml(c.prenom || '')} <span class="badge badge-muted">${escapeHtml(c.statut)}</span></a>
+                <button class="btn btn-danger btn-sm" data-unlink-casier="${c.id}">Délier</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <section style="padding:12px 0">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Plaintes liées</h2>
+            <button class="btn btn-secondary btn-sm" id="link-plainte-btn">+ Lier une plainte</button>
+          </div>
+          <div id="plaintes-list">
+            ${plaintes.length === 0 ? '<div class="empty-state">Aucune plainte liée.</div>' : plaintes.map(p => `
+              <div class="flex-between" style="padding:8px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                <a href="plainte-detail.html?id=${p.id}">${escapeHtml(p.numero)} — ${escapeHtml(p.plaignant_nom)} <span class="badge badge-muted">${escapeHtml(p.statut)}</span></a>
+                <button class="btn btn-danger btn-sm" data-unlink-plainte="${p.id}">Délier</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      `;
+
+      document.getElementById('e-form').addEventListener('submit', saveEnquete);
+      document.getElementById('delete-btn').addEventListener('click', deleteEnquete);
+      document.getElementById('link-casier-btn').addEventListener('click', linkCasier);
+      document.getElementById('link-plainte-btn').addEventListener('click', linkPlainte);
+      document.querySelectorAll('[data-unlink-casier]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/enquetes/${enqueteId}/casiers/${btn.dataset.unlinkCasier}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      document.querySelectorAll('[data-unlink-plainte]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/enquetes/${enqueteId}/plaintes/${btn.dataset.unlinkPlainte}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+
+    async function saveEnquete(e) {
+      e.preventDefault();
+      try {
+        await api(`/enquetes/${enqueteId}`, {
+          method: 'PUT',
+          body: {
+            titre: document.getElementById('e-titre').value.trim(),
+            description: document.getElementById('e-description').value.trim(),
+            statut: document.getElementById('e-statut').value,
+          },
+        });
+        toast('Dossier mis à jour.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deleteEnquete() {
+      if (!confirm('Supprimer définitivement ce dossier d\'enquête ?')) return;
+      try {
+        await api(`/enquetes/${enqueteId}`, { method: 'DELETE' });
+        toast('Dossier supprimé.');
+        window.location.href = 'enquetes.html';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function linkCasier() {
+      const query = prompt('Rechercher un casier par nom :');
+      if (!query) return;
+      try {
+        const { casiers } = await api(`/casiers?q=${encodeURIComponent(query)}`);
+        if (casiers.length === 0) { toast('Aucun casier trouvé.', 'error'); return; }
+        const choice = casiers.length === 1 ? casiers[0] : casiers.find(c => confirm(`Lier ${c.nom} ${c.prenom || ''} ?`));
+        if (!choice) return;
+        await api(`/enquetes/${enqueteId}/casiers`, { method: 'POST', body: { casier_id: choice.id } });
+        toast('Casier lié.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function linkPlainte() {
+      const query = prompt('Rechercher une plainte par plaignant, mis en cause, ou numéro :');
+      if (!query) return;
+      try {
+        const { plaintes } = await api(`/plaintes?q=${encodeURIComponent(query)}`);
+        if (plaintes.length === 0) { toast('Aucune plainte trouvée.', 'error'); return; }
+        const choice = plaintes.length === 1 ? plaintes[0] : plaintes.find(p => confirm(`Lier ${p.numero} — ${p.plaignant_nom} ?`));
+        if (!choice) return;
+        await api(`/enquetes/${enqueteId}/plaintes`, { method: 'POST', body: { plainte_id: choice.id } });
+        toast('Plainte liée.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

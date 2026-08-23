@@ -38,6 +38,15 @@ lourd) pour rester très léger en consommation de données et en ressources ser
   multiples éditables à tout moment, infractions liées au code pénal. Une plainte peut être
   marquée **privée** : elle reste alors invisible aux autres membres, mais toujours consultable
   par son créateur et par les Gérant et plus (`peut_valider_comptes`).
+- **Pôles** : spécialisations transversales, indépendantes du grade — un compte peut appartenir
+  à plusieurs pôles à la fois, assignables depuis `/admin-comptes.html`. **DEV appartient
+  automatiquement aux trois**, resynchronisé à chaque démarrage.
+  - **Administratif** (`/administratif.html`) : rapport des amendes perçues par agent sur une
+    période donnée, et gestion des formations (avec formateur et participants).
+  - **Enquête** (`/enquetes.html`) : dossiers d'enquête reliant plusieurs casiers et plaintes
+    entre eux, avec suivi de statut (ouverte / en cours / clôturée).
+  - **Sécurité** (`/securite.html`) : journal des incidents de sécurité, en complément du
+    planning des patrouilles déjà existant.
 - **Journal d'activité** : historique des actions administratives (validations de compte,
   changements de grade/rang, modifications du code pénal, casiers créés/supprimés, blâmes
   appliqués, activation d'un code d'alerte…), consultable sur `/journal.html`.

@@ -31,7 +31,12 @@ router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (r
     const { rows } = await pool.query(
       `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
-              r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur
+              r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', p.id, 'nom', p.nom, 'couleur', p.couleur))
+                 FROM user_poles up JOIN poles p ON p.id = up.pole_id WHERE up.user_id = u.id),
+                '[]'
+              ) AS poles
        FROM users u
        LEFT JOIN grades g ON g.id = u.grade_id
        LEFT JOIN rangs_ninja r ON r.id = u.rang_id
@@ -148,6 +153,37 @@ router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes')
     res.json({ message: `Rang de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/rang]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PATCH /api/users/:id/poles — remplace la liste des pôles d'un membre (Administratif, Enquête, Sécurité...)
+router.patch('/:id/poles', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+
+    if (targetId === req.session.user.id) {
+      return res.status(403).json({ error: 'Vous ne pouvez pas modifier vos propres pôles.' });
+    }
+
+    const { rows: targetRows } = await pool.query('SELECT protege, username FROM users WHERE id = $1', [targetId]);
+    if (targetRows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    if (targetRows[0].protege) {
+      return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être modifié (il appartient déjà à tous les pôles).' });
+    }
+
+    const { pole_ids } = req.body;
+    if (!Array.isArray(pole_ids)) return res.status(400).json({ error: 'pole_ids doit être un tableau.' });
+
+    await pool.query('DELETE FROM user_poles WHERE user_id = $1', [targetId]);
+    for (const poleId of pole_ids) {
+      await pool.query('INSERT INTO user_poles (user_id, pole_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [targetId, poleId]);
+    }
+
+    await logActivity(req.session.user.id, req.session.user.username, 'poles_modifies', `Pôles de ${targetRows[0].username} mis à jour`);
+    res.json({ message: `Pôles de ${targetRows[0].username} mis à jour.` });
+  } catch (err) {
+    console.error('[users/poles]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

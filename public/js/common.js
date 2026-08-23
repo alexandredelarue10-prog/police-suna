@@ -41,6 +41,20 @@ function buildNavbar(activeKey) {
     ].join('');
   }
 
+  // --- Groupe 3bis : Mes pôles (selon appartenance) ---
+  let poleLinks = '';
+  if (CURRENT_USER && Array.isArray(CURRENT_USER.poles)) {
+    if (CURRENT_USER.poles.includes('Administratif')) {
+      poleLinks += linkHtml('administratif.html', 'Administratif', 'administratif');
+    }
+    if (CURRENT_USER.poles.includes('Enquête')) {
+      poleLinks += linkHtml('enquetes.html', 'Enquête', 'enquetes');
+    }
+    if (CURRENT_USER.poles.includes('Sécurité')) {
+      poleLinks += linkHtml('securite.html', 'Sécurité', 'securite');
+    }
+  }
+
   // --- Groupe 3 : Administration (selon permissions) ---
   let adminLinks = '';
   if (CURRENT_USER) {
@@ -66,6 +80,7 @@ function buildNavbar(activeKey) {
   const groups = [
     ['Le village', villageLinks],
     CURRENT_USER ? ['Mon espace', espaceLinks] : null,
+    poleLinks ? ['Mes pôles', poleLinks] : null,
     adminLinks ? ['Administration', adminLinks] : null,
   ].filter(Boolean);
 

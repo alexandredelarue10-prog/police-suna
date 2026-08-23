@@ -250,6 +250,46 @@ async function run() {
     ))
   `);
 
+  // --- Pôles : textes officiels toujours resynchronisés (comme le grade Fondateur) ---
+  const poles = [
+    {
+      nom: 'Enquête',
+      resume: 'Investigations, filatures et collecte de renseignements',
+      description: "Le pôle enquête est en charge de mener à bien toutes les enquêtes, s'assurent de leur suivis jusqu'à conclusion. Ils sont également chargés de la collecte de renseignements, des filatures nécessaires aux enquêtes.",
+      couleur: '#3E5C6B',
+    },
+    {
+      nom: 'Administratif',
+      resume: 'Gestion administrative et logistique du village',
+      description: "Le pôle administratif est en charge des formations des jeunes inspecteurs, le suivi des rapports des inspecteurs. Ils sont également chargés d'assurer la communication entre la Police et le reste du village mais ils sont aussi affectés à la comptabilité de notre section (récolte des amendes).",
+      couleur: '#B8922F',
+    },
+    {
+      nom: 'Sécurité',
+      resume: 'Protection du village et maintien de l\'ordre',
+      description: "Le pôle sécurité est en charge d'organiser les patrouilles, la surveillance des entrées et sorties du village, l'escorte lors de déplacements diplomatiques ou l'escorte de délégations étrangères.",
+      couleur: '#7A2E2E',
+    },
+  ];
+  for (const p of poles) {
+    await pool.query(
+      `INSERT INTO poles (nom, resume, description, couleur) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (nom) DO UPDATE SET resume = EXCLUDED.resume, description = EXCLUDED.description, couleur = EXCLUDED.couleur`,
+      [p.nom, p.resume, p.description, p.couleur]
+    );
+  }
+
+  // --- DEV doit appartenir à tous les pôles, à chaque démarrage ---
+  const { rows: devRow } = await pool.query("SELECT id FROM users WHERE username = 'DEV'");
+  if (devRow.length > 0) {
+    await pool.query(
+      `INSERT INTO user_poles (user_id, pole_id)
+       SELECT $1, id FROM poles
+       ON CONFLICT (user_id, pole_id) DO NOTHING`,
+      [devRow[0].id]
+    );
+  }
+
   console.log('[seed] Terminé.');
 }
 

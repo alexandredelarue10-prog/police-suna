@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pôle Sécurité — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Pôle Sécurité</h1>
+          <p class="muted" style="max-width:600px">Protection du village et maintien de l'ordre : organisation des patrouilles, surveillance des entrées et sorties, escortes diplomatiques.</p>
+        </div>
+        <button class="btn btn-primary" id="new-btn">+ Signaler un incident</button>
+      </div>
+      <p style="margin-bottom:20px"><a href="planning.html">→ Voir le planning des patrouilles</a></p>
+      <div id="incidents-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="incident-modal">
+    <div class="modal">
+      <h3 id="modal-title">Signaler un incident</h3>
+      <form id="incident-form">
+        <input type="hidden" id="i-id" />
+        <div class="field">
+          <label for="i-titre">Titre *</label>
+          <input type="text" id="i-titre" required />
+        </div>
+        <div class="field">
+          <label for="i-description">Description</label>
+          <textarea id="i-description" rows="3"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="i-lieu">Lieu</label>
+            <input type="text" id="i-lieu" />
+          </div>
+          <div class="field">
+            <label for="i-date">Date</label>
+            <input type="date" id="i-date" />
+          </div>
+          <div class="field">
+            <label for="i-gravite">Gravité (1-5)</label>
+            <input type="number" id="i-gravite" min="1" max="5" value="1" />
+          </div>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let incidentsCache = [];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'securite', requireAuth: true });
+      if (!user || !user.poles.includes('Sécurité')) { window.location.href = 'dashboard.html'; return; }
+      document.getElementById('new-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('incident-modal').classList.remove('open'));
+      document.getElementById('incident-form').addEventListener('submit', saveIncident);
+      loadIncidents();
+    })();
+
+    async function loadIncidents() {
+      const container = document.getElementById('incidents-list');
+      try {
+        const { incidents } = await api('/securite/incidents');
+        incidentsCache = incidents;
+        if (incidents.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun incident signalé.</div>';
+          return;
+        }
+        container.innerHTML = incidents.map(i => `
+          <div class="card" style="margin-bottom:12px; border-left:4px solid var(--sceau-600)">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:10px">
+              <div>
+                <span class="badge badge-danger" style="opacity:${i.niveau_gravite / 5}">Gravité ${i.niveau_gravite}/5</span>
+                <h3 style="font-size:1rem; margin:6px 0 2px">${escapeHtml(i.titre)}</h3>
+                <p class="muted mb-0" style="font-size:0.8rem">
+                  ${i.date_incident ? formatDate(i.date_incident) : 'Date non précisée'}${i.lieu ? ' · ' + escapeHtml(i.lieu) : ''} · Signalé par ${escapeHtml(i.agent_username || '—')}
+                </p>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${i.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${i.id}">Suppr.</button>
+              </div>
+            </div>
+            ${i.description ? `<p style="font-size:0.86rem; margin-top:8px">${escapeHtml(i.description)}</p>` : ''}
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openModal(incidentsCache.find(i => i.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer cet incident ?')) return;
+            try { await api(`/securite/incidents/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Incident supprimé.'); loadIncidents(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(incident = null) {
+      document.getElementById('incident-form').reset();
+      document.getElementById('i-gravite').value = 1;
+      if (incident) {
+        document.getElementById('modal-title').textContent = 'Modifier l\'incident';
+        document.getElementById('i-id').value = incident.id;
+        document.getElementById('i-titre').value = incident.titre;
+        document.getElementById('i-description').value = incident.description || '';
+        document.getElementById('i-lieu').value = incident.lieu || '';
+        document.getElementById('i-date').value = incident.date_incident ? String(incident.date_incident).slice(0, 10) : '';
+        document.getElementById('i-gravite').value = incident.niveau_gravite;
+      } else {
+        document.getElementById('modal-title').textContent = 'Signaler un incident';
+        document.getElementById('i-id').value = '';
+      }
+      document.getElementById('incident-modal').classList.add('open');
+    }
+
+    async function saveIncident(e) {
+      e.preventDefault();
+      const id = document.getElementById('i-id').value;
+      const payload = {
+        titre: document.getElementById('i-titre').value.trim(),
+        description: document.getElementById('i-description').value.trim(),
+        lieu: document.getElementById('i-lieu').value.trim(),
+        date_incident: document.getElementById('i-date').value || null,
+        niveau_gravite: parseInt(document.getElementById('i-gravite').value) || 1,
+      };
+      try {
+        if (id) await api(`/securite/incidents/${id}`, { method: 'PUT', body: payload });
+        else await api('/securite/incidents', { method: 'POST', body: payload });
+        toast('Incident enregistré.');
+        document.getElementById('incident-modal').classList.remove('open');
+        loadIncidents();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

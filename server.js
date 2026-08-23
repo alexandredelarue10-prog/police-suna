@@ -24,6 +24,10 @@ const statsRoutes = require('./src/routes/stats.routes');
 const rechercheRoutes = require('./src/routes/recherche.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const plaintesRoutes = require('./src/routes/plaintes.routes');
+const polesRoutes = require('./src/routes/poles.routes');
+const administratifRoutes = require('./src/routes/administratif.routes');
+const enquetesRoutes = require('./src/routes/enquetes.routes');
+const securiteRoutes = require('./src/routes/securite.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -80,6 +84,10 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/recherche', rechercheRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/plaintes', plaintesRoutes);
+app.use('/api/poles', polesRoutes);
+app.use('/api/administratif', administratifRoutes);
+app.use('/api/enquetes', enquetesRoutes);
+app.use('/api/securite', securiteRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

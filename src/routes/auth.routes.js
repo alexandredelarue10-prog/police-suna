@@ -48,6 +48,12 @@ async function buildSessionUser(userRow) {
     }
   }
 
+  const { rows: poleRows } = await pool.query(
+    `SELECT p.nom, p.couleur FROM user_poles up JOIN poles p ON p.id = up.pole_id WHERE up.user_id = $1`,
+    [userRow.id]
+  );
+  const poles = poleRows.map((p) => p.nom);
+
   return {
     id: userRow.id,
     username: userRow.username,
@@ -58,6 +64,7 @@ async function buildSessionUser(userRow) {
     rang_couleur: rangCouleur,
     brigade: userRow.brigade,
     protege: userRow.protege,
+    poles,
     grade_id: userRow.grade_id,
     grade_nom: gradeNom,
     grade_couleur: gradeCouleur,

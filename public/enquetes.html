@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pôle Enquête — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Pôle Enquête</h1>
+          <p class="muted" style="max-width:600px">Investigations, filatures et collecte de renseignements. Mène les enquêtes jusqu'à conclusion.</p>
+        </div>
+        <button class="btn btn-primary" id="new-btn">+ Ouvrir un dossier</button>
+      </div>
+      <div id="enquetes-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="new-modal">
+    <div class="modal">
+      <h3>Ouvrir un dossier d'enquête</h3>
+      <form id="new-form">
+        <div class="field">
+          <label for="e-titre">Titre *</label>
+          <input type="text" id="e-titre" required />
+        </div>
+        <div class="field">
+          <label for="e-description">Description</label>
+          <textarea id="e-description" rows="3"></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="new-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ouvrir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const statutLabels = { ouverte: ['Ouverte', 'badge-warn'], en_cours: ['En cours', 'badge-danger'], cloturee: ['Clôturée', 'badge-ok'] };
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'enquetes', requireAuth: true });
+      if (!user || !user.poles.includes('Enquête')) { window.location.href = 'dashboard.html'; return; }
+      document.getElementById('new-btn').addEventListener('click', () => document.getElementById('new-modal').classList.add('open'));
+      document.getElementById('new-cancel').addEventListener('click', () => document.getElementById('new-modal').classList.remove('open'));
+      document.getElementById('new-form').addEventListener('submit', createEnquete);
+      loadEnquetes();
+    })();
+
+    async function loadEnquetes() {
+      const grid = document.getElementById('enquetes-grid');
+      try {
+        const { enquetes } = await api('/enquetes');
+        if (enquetes.length === 0) {
+          grid.innerHTML = '<div class="empty-state">Aucun dossier d\'enquête ouvert.</div>';
+          return;
+        }
+        grid.innerHTML = enquetes.map(e => {
+          const [label, cls] = statutLabels[e.statut] || ['Inconnu', 'badge-muted'];
+          return `
+            <a href="enquete-detail.html?id=${e.id}" class="dossier" data-tab="${escapeHtml(e.numero)}">
+              <span class="badge ${cls}">${label}</span>
+              <h3>${escapeHtml(e.titre)}</h3>
+              <div class="meta">Enquêteur : ${escapeHtml(e.enqueteur_username || '—')}</div>
+              <div class="meta" style="margin-top:6px">
+                ${e.nb_casiers > 0 ? `<span class="badge badge-muted">${e.nb_casiers} casier(s)</span> ` : ''}
+                ${e.nb_plaintes > 0 ? `<span class="badge badge-muted">${e.nb_plaintes} plainte(s)</span>` : ''}
+              </div>
+            </a>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function createEnquete(e) {
+      e.preventDefault();
+      try {
+        const { enquete } = await api('/enquetes', {
+          method: 'POST',
+          body: { titre: document.getElementById('e-titre').value.trim(), description: document.getElementById('e-description').value.trim() },
+        });
+        window.location.href = `enquete-detail.html?id=${enquete.id}`;
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

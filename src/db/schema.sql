@@ -252,6 +252,75 @@ CREATE TABLE IF NOT EXISTS casier_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_casier_notes_casier ON casier_notes(casier_id);
 
+-- PÔLES (Administratif, Enquête, Sécurité...) : un compte peut appartenir à plusieurs pôles.
+-- Distinct du grade (poste hiérarchique) : c'est une spécialisation transversale.
+CREATE TABLE IF NOT EXISTS poles (
+  id SERIAL PRIMARY KEY,
+  nom VARCHAR(60) NOT NULL UNIQUE,
+  resume VARCHAR(200) DEFAULT '', -- courte accroche
+  description TEXT DEFAULT '', -- texte complet du rôle du pôle
+  couleur VARCHAR(7) NOT NULL DEFAULT '#3E5C6B',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE poles ADD COLUMN IF NOT EXISTS resume VARCHAR(200) DEFAULT '';
+CREATE TABLE IF NOT EXISTS user_poles (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pole_id INTEGER NOT NULL REFERENCES poles(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, pole_id)
+);
+
+-- PÔLE ADMINISTRATIF : formations
+CREATE TABLE IF NOT EXISTS formations (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL,
+  description TEXT DEFAULT '',
+  date_formation DATE,
+  formateur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  statut VARCHAR(30) NOT NULL DEFAULT 'planifiee', -- planifiee | terminee | annulee
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS formation_participants (
+  formation_id INTEGER NOT NULL REFERENCES formations(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (formation_id, user_id)
+);
+
+-- PÔLE ENQUÊTE : dossiers d'enquête reliant plusieurs casiers et plaintes entre eux
+CREATE TABLE IF NOT EXISTS enquetes (
+  id SERIAL PRIMARY KEY,
+  numero VARCHAR(20) UNIQUE,
+  titre VARCHAR(150) NOT NULL,
+  description TEXT DEFAULT '',
+  statut VARCHAR(30) NOT NULL DEFAULT 'ouverte', -- ouverte | en_cours | cloturee
+  enqueteur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE SEQUENCE IF NOT EXISTS enquete_numero_seq START 1;
+CREATE TABLE IF NOT EXISTS enquete_casiers (
+  enquete_id INTEGER NOT NULL REFERENCES enquetes(id) ON DELETE CASCADE,
+  casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
+  PRIMARY KEY (enquete_id, casier_id)
+);
+CREATE TABLE IF NOT EXISTS enquete_plaintes (
+  enquete_id INTEGER NOT NULL REFERENCES enquetes(id) ON DELETE CASCADE,
+  plainte_id INTEGER NOT NULL REFERENCES plaintes(id) ON DELETE CASCADE,
+  PRIMARY KEY (enquete_id, plainte_id)
+);
+
+-- PÔLE SÉCURITÉ : journal des incidents de sécurité
+CREATE TABLE IF NOT EXISTS incidents_securite (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL,
+  description TEXT DEFAULT '',
+  niveau_gravite INTEGER NOT NULL DEFAULT 1,
+  lieu VARCHAR(150) DEFAULT '',
+  date_incident DATE,
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Séquence dédiée aux matricules : indépendante du COUNT(*) des utilisateurs pour ne jamais
 -- entrer en collision, même après suppression de comptes (contrairement à COUNT(*)+1).
 CREATE SEQUENCE IF NOT EXISTS matricule_seq START 1;

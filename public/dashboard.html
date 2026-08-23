@@ -44,6 +44,9 @@
       const links = [
         { href: 'casiers.html', title: 'Casiers judiciaires', desc: 'Consulter et gérer les dossiers des suspects.', show: true },
         { href: 'plaintes.html', title: 'Dépôts de plainte', desc: 'Enregistrer une plainte avec témoignages et infractions.', show: true },
+        { href: 'administratif.html', title: 'Pôle Administratif', desc: 'Rapport des amendes et gestion des formations.', show: user.poles.includes('Administratif') },
+        { href: 'enquetes.html', title: 'Pôle Enquête', desc: "Dossiers d'enquête reliant casiers et plaintes.", show: user.poles.includes('Enquête') },
+        { href: 'securite.html', title: 'Pôle Sécurité', desc: 'Incidents de sécurité et patrouilles.', show: user.poles.includes('Sécurité') },
         { href: 'organigramme.html', title: 'Organigramme', desc: 'Hiérarchie complète des forces de police.', show: true },
         { href: 'profil.html', title: 'Mon profil', desc: 'Modifier votre mot de passe.', show: true },
         { href: 'admin-comptes.html', title: 'Gestion des comptes', desc: 'Valider les demandes et attribuer les grades.', show: user.permissions.peut_valider_comptes },

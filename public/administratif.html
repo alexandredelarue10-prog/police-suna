@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pôle Administratif — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <h1>Pôle Administratif</h1>
+      <p class="muted" style="max-width:640px">Gestion administrative et logistique du village : formations des jeunes inspecteurs, suivi des rapports, communication avec le village, et comptabilité de la section (récolte des amendes).</p>
+
+      <section>
+        <h2 style="font-size:1.1rem">Rapport des amendes</h2>
+        <div class="field-row" style="max-width:520px; align-items:flex-end">
+          <div class="field">
+            <label for="date-debut">Du</label>
+            <input type="date" id="date-debut" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+          </div>
+          <div class="field">
+            <label for="date-fin">Au</label>
+            <input type="date" id="date-fin" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+          </div>
+          <div class="field" style="flex:0">
+            <button class="btn btn-primary" id="run-rapport-btn">Générer</button>
+          </div>
+        </div>
+        <div id="rapport-content"><div class="empty-state">Choisissez une période puis cliquez sur "Générer".</div></div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.1rem">Formations</h2>
+          <button class="btn btn-primary btn-sm" id="new-formation-btn">+ Planifier une formation</button>
+        </div>
+        <div id="formations-list"><div class="loader">Chargement…</div></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="formation-modal">
+    <div class="modal">
+      <h3 id="formation-modal-title">Nouvelle formation</h3>
+      <form id="formation-form">
+        <input type="hidden" id="f-id" />
+        <div class="field">
+          <label for="f-titre">Titre *</label>
+          <input type="text" id="f-titre" required />
+        </div>
+        <div class="field">
+          <label for="f-description">Description</label>
+          <textarea id="f-description" rows="2"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-date">Date</label>
+            <input type="date" id="f-date" />
+          </div>
+          <div class="field">
+            <label for="f-statut">Statut</label>
+            <select id="f-statut">
+              <option value="planifiee">Planifiée</option>
+              <option value="terminee">Terminée</option>
+              <option value="annulee">Annulée</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-formateur">Formateur</label>
+          <select id="f-formateur"><option value="">— Non assigné —</option></select>
+        </div>
+        <div class="field">
+          <label>Participants</label>
+          <div id="f-participants" style="max-height:160px; overflow-y:auto; border:1px solid rgba(23,21,15,0.15); border-radius:4px; padding:8px"></div>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="formation-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let usersCache = [];
+    let formationsCache = [];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'administratif', requireAuth: true });
+      if (!user || !user.poles.includes('Administratif')) { window.location.href = 'dashboard.html'; return; }
+
+      try {
+        const { users } = await api('/users');
+        usersCache = users.filter(u => u.statut === 'approuve');
+        const formateurSelect = document.getElementById('f-formateur');
+        usersCache.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = u.nom_complet || u.username;
+          formateurSelect.appendChild(opt);
+        });
+        document.getElementById('f-participants').innerHTML = usersCache.map(u => `
+          <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-weight:400; font-size:0.85rem; padding:3px 0">
+            <input type="checkbox" class="participant-check" value="${u.id}" style="width:auto" /> ${escapeHtml(u.nom_complet || u.username)}
+          </label>
+        `).join('');
+      } catch (_) { /* silencieux */ }
+
+      document.getElementById('run-rapport-btn').addEventListener('click', loadRapport);
+      document.getElementById('new-formation-btn').addEventListener('click', () => openFormationModal());
+      document.getElementById('formation-cancel').addEventListener('click', () => document.getElementById('formation-modal').classList.remove('open'));
+      document.getElementById('formation-form').addEventListener('submit', saveFormation);
+
+      loadFormations();
+    })();
+
+    async function loadRapport() {
+      const container = document.getElementById('rapport-content');
+      const dateDebut = document.getElementById('date-debut').value;
+      const dateFin = document.getElementById('date-fin').value;
+      container.innerHTML = '<div class="loader">Calcul en cours…</div>';
+      try {
+        const params = new URLSearchParams();
+        if (dateDebut) params.set('date_debut', dateDebut);
+        if (dateFin) params.set('date_fin', dateFin);
+        const { rapport, total_general } = await api(`/administratif/rapport-amendes?${params}`);
+        if (rapport.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucune amende enregistrée sur cette période.</div>';
+          return;
+        }
+        container.innerHTML = `
+          <div class="table-wrap" style="margin-top:14px">
+            <table>
+              <thead><tr><th>Agent</th><th>Nb amendes</th><th>Total</th></tr></thead>
+              <tbody>
+                ${rapport.map(r => `
+                  <tr>
+                    <td>${escapeHtml(r.agent_nom)}</td>
+                    <td>${r.nb_amendes}</td>
+                    <td>${r.total_amendes.toLocaleString('fr-FR')} ryō</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="font-weight:700"><td>Total général</td><td></td><td>${total_general.toLocaleString('fr-FR')} ryō</td></tr>
+              </tfoot>
+            </table>
+          </div>`;
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function loadFormations() {
+      const container = document.getElementById('formations-list');
+      try {
+        const { formations } = await api('/administratif/formations');
+        formationsCache = formations;
+        if (formations.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucune formation planifiée.</div>';
+          return;
+        }
+        const statutBadge = { planifiee: 'badge-warn', terminee: 'badge-ok', annulee: 'badge-muted' };
+        container.innerHTML = formations.map(f => `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:10px">
+              <div>
+                <span class="badge ${statutBadge[f.statut] || 'badge-muted'}">${escapeHtml(f.statut)}</span>
+                <h3 style="font-size:1rem; margin:6px 0 2px">${escapeHtml(f.titre)}</h3>
+                <p class="muted mb-0" style="font-size:0.8rem">
+                  ${f.date_formation ? formatDate(f.date_formation) : 'Date non précisée'}
+                  ${f.formateur_username ? ' · Formateur : ' + escapeHtml(f.formateur_username) : ''}
+                </p>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${f.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${f.id}">Suppr.</button>
+              </div>
+            </div>
+            ${f.description ? `<p style="font-size:0.86rem; margin-top:8px">${escapeHtml(f.description)}</p>` : ''}
+            ${f.participants && f.participants.length ? `<p class="muted mb-0" style="font-size:0.78rem">Participants : ${f.participants.map(p => escapeHtml(p.nom)).join(', ')}</p>` : ''}
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openFormationModal(formationsCache.find(f => f.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer cette formation ?')) return;
+            try { await api(`/administratif/formations/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Formation supprimée.'); loadFormations(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openFormationModal(formation = null) {
+      document.getElementById('formation-form').reset();
+      document.querySelectorAll('.participant-check').forEach(c => { c.checked = false; });
+      if (formation) {
+        document.getElementById('formation-modal-title').textContent = 'Modifier la formation';
+        document.getElementById('f-id').value = formation.id;
+        document.getElementById('f-titre').value = formation.titre;
+        document.getElementById('f-description').value = formation.description || '';
+        document.getElementById('f-date').value = formation.date_formation ? String(formation.date_formation).slice(0, 10) : '';
+        document.getElementById('f-statut').value = formation.statut;
+        document.getElementById('f-formateur').value = formation.formateur_id || '';
+        const participantIds = (formation.participants || []).map(p => p.id);
+        document.querySelectorAll('.participant-check').forEach(c => { c.checked = participantIds.includes(parseInt(c.value)); });
+      } else {
+        document.getElementById('formation-modal-title').textContent = 'Nouvelle formation';
+        document.getElementById('f-id').value = '';
+      }
+      document.getElementById('formation-modal').classList.add('open');
+    }
+
+    async function saveFormation(e) {
+      e.preventDefault();
+      const id = document.getElementById('f-id').value;
+      const participant_ids = [...document.querySelectorAll('.participant-check:checked')].map(c => parseInt(c.value));
+      const payload = {
+        titre: document.getElementById('f-titre').value.trim(),
+        description: document.getElementById('f-description').value.trim(),
+        date_formation: document.getElementById('f-date').value || null,
+        statut: document.getElementById('f-statut').value,
+        formateur_id: document.getElementById('f-formateur').value || null,
+        participant_ids,
+      };
+      try {
+        if (id) await api(`/administratif/formations/${id}`, { method: 'PUT', body: payload });
+        else await api('/administratif/formations', { method: 'POST', body: payload });
+        toast('Formation enregistrée.');
+        document.getElementById('formation-modal').classList.remove('open');
+        loadFormations();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -19,4 +19,18 @@ function requirePermission(permKey) {
   };
 }
 
-module.exports = { requireAuth, requirePermission };
+// Fabrique un middleware qui vérifie que l'utilisateur appartient à un pôle précis
+// (Administratif, Enquête, Sécurité...). Indépendant du système de grades/permissions.
+function requirePole(poleNom) {
+  return (req, res, next) => {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ error: 'Non authentifié.' });
+    }
+    if (!Array.isArray(req.session.user.poles) || !req.session.user.poles.includes(poleNom)) {
+      return res.status(403).json({ error: `Réservé aux membres du pôle ${poleNom}.` });
+    }
+    next();
+  };
+}
+
+module.exports = { requireAuth, requirePermission, requirePole };
