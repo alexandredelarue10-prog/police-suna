@@ -215,15 +215,34 @@ async function run() {
   const { rows: fondateurGrade } = await pool.query("SELECT id FROM grades WHERE nom = 'Fondateur' LIMIT 1");
   const fondateurId = fondateurGrade[0] ? fondateurGrade[0].id : null;
 
+  // Resynchronise la séquence des matricules AVANT toute nouvelle attribution (y compris pour DEV),
+  // pour ne jamais entrer en collision avec un matricule déjà existant sur une base migrée.
+  // Ne touche la séquence QUE s'il existe déjà des matricules : sur une base neuve, setval()
+  // marquerait la séquence comme "déjà utilisée" et ferait sauter le tout premier numéro
+  // (ex : DEV recevrait SUNA-0002 au lieu de SUNA-0001).
+  await pool.query(`
+    DO $$
+    DECLARE max_matricule INTEGER;
+    BEGIN
+      SELECT COALESCE(MAX(CAST(substring(matricule FROM 6) AS INTEGER)), 0) INTO max_matricule
+      FROM users WHERE matricule ~ '^SUNA-[0-9]+$';
+      IF max_matricule > 0 THEN
+        PERFORM setval('matricule_seq', max_matricule, true);
+      END IF;
+    END $$;
+  `);
+
   const { rows: existing } = await pool.query('SELECT id, grade_id FROM users WHERE username = $1', ['DEV']);
   if (existing.length === 0) {
     const hash = await bcrypt.hash('roidudev', 12);
+    const { rows: seqRows } = await pool.query("SELECT nextval('matricule_seq') AS n");
+    const matricule = `SUNA-${String(seqRows[0].n).padStart(4, '0')}`;
     await pool.query(
       `INSERT INTO users (username, password_hash, nom_complet, grade_id, statut, matricule, valide_le, protege)
        VALUES ($1,$2,$3,$4,'approuve',$5, now(), TRUE)`,
-      ['DEV', hash, 'Administrateur Principal', fondateurId, 'SUNA-0001']
+      ['DEV', hash, 'Administrateur Principal', fondateurId, matricule]
     );
-    console.log('[seed] Compte principal "DEV" créé avec le grade réservé "Fondateur".');
+    console.log(`[seed] Compte principal "DEV" créé avec le grade réservé "Fondateur" (matricule ${matricule}).`);
   } else {
     // S'assure que DEV reste protégé et détient bien le grade réservé, même après une migration manuelle
     await pool.query(
@@ -232,22 +251,17 @@ async function run() {
     );
   }
 
-  // --- Resynchronisation de la séquence des matricules ---
-  // Garantit que la séquence est toujours au moins égale au plus haut matricule déjà utilisé,
-  // pour ne jamais générer de doublon (ex : après suppression de comptes intermédiaires).
+  // --- Resynchronisation de la séquence des numéros de plainte (même logique, même prudence) ---
   await pool.query(`
-    SELECT setval('matricule_seq', GREATEST(
-      (SELECT COALESCE(MAX(CAST(substring(matricule FROM 6) AS INTEGER)), 0) FROM users WHERE matricule ~ '^SUNA-[0-9]+$'),
-      (SELECT last_value FROM matricule_seq)
-    ))
-  `);
-
-  // --- Resynchronisation de la séquence des numéros de plainte (même logique) ---
-  await pool.query(`
-    SELECT setval('plainte_numero_seq', GREATEST(
-      (SELECT COALESCE(MAX(CAST(substring(numero FROM 4) AS INTEGER)), 0) FROM plaintes WHERE numero ~ '^PL-[0-9]+$'),
-      (SELECT last_value FROM plainte_numero_seq)
-    ))
+    DO $$
+    DECLARE max_numero INTEGER;
+    BEGIN
+      SELECT COALESCE(MAX(CAST(substring(numero FROM 4) AS INTEGER)), 0) INTO max_numero
+      FROM plaintes WHERE numero ~ '^PL-[0-9]+$';
+      IF max_numero > 0 THEN
+        PERFORM setval('plainte_numero_seq', max_numero, true);
+      END IF;
+    END $$;
   `);
 
   // --- Pôles : textes officiels toujours resynchronisés (comme le grade Fondateur) ---
@@ -278,6 +292,13 @@ async function run() {
       [p.nom, p.resume, p.description, p.couleur]
     );
   }
+
+  // --- Migration douce : anciennes patrouilles avec agent_id unique -> table multi-agents ---
+  await pool.query(`
+    INSERT INTO patrouille_agents (patrouille_id, user_id)
+    SELECT id, agent_id FROM patrouilles WHERE agent_id IS NOT NULL
+    ON CONFLICT DO NOTHING
+  `);
 
   // --- DEV doit appartenir à tous les pôles, à chaque démarrage ---
   const { rows: devRow } = await pool.query("SELECT id FROM users WHERE username = 'DEV'");

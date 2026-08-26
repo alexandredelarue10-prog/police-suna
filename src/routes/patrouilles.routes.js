@@ -9,8 +9,13 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, u.username AS agent_username, u.nom_complet AS agent_nom
-       FROM patrouilles p LEFT JOIN users u ON u.id = p.agent_id
+      `SELECT p.*,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', u.id, 'nom', COALESCE(u.nom_complet, u.username)))
+                 FROM patrouille_agents pa JOIN users u ON u.id = pa.user_id WHERE pa.patrouille_id = p.id),
+                '[]'
+              ) AS agents
+       FROM patrouilles p
        WHERE p.date_service >= CURRENT_DATE - INTERVAL '1 day'
        ORDER BY p.date_service, p.heure_debut`
     );
@@ -21,23 +26,56 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/patrouilles — planifier un service
+// POST /api/patrouilles — planifier un service, avec un ou plusieurs agents assignés
 router.post('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
-    const { titre, date_service, heure_debut, heure_fin, agent_id, notes } = req.body;
+    const { titre, date_service, heure_debut, heure_fin, agent_ids, statut, notes } = req.body;
     if (!titre || !date_service) return res.status(400).json({ error: 'Titre et date sont requis.' });
 
     const { rows } = await pool.query(
-      `INSERT INTO patrouilles (titre, date_service, heure_debut, heure_fin, agent_id, notes, cree_par)
+      `INSERT INTO patrouilles (titre, date_service, heure_debut, heure_fin, statut, notes, cree_par)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [titre, date_service, heure_debut || '', heure_fin || '', agent_id || null, notes || '', req.session.user.id]
+      [titre, date_service, heure_debut || '', heure_fin || '', statut || 'planifiee', notes || '', req.session.user.id]
     );
+
+    if (Array.isArray(agent_ids)) {
+      for (const uid of agent_ids) {
+        await pool.query('INSERT INTO patrouille_agents (patrouille_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rows[0].id, uid]);
+      }
+    }
 
     await logActivity(req.session.user.id, req.session.user.username, 'patrouille_creee', `${titre} — ${date_service}`);
 
     res.status(201).json({ patrouille: rows[0] });
   } catch (err) {
     console.error('[patrouilles/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PUT /api/patrouilles/:id — modifier un service (horaires, statut, agents assignés)
+router.put('/:id', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
+  try {
+    const { titre, date_service, heure_debut, heure_fin, agent_ids, statut, notes } = req.body;
+    if (!titre || !date_service) return res.status(400).json({ error: 'Titre et date sont requis.' });
+
+    const { rows } = await pool.query(
+      `UPDATE patrouilles SET titre=$1, date_service=$2, heure_debut=$3, heure_fin=$4, statut=$5, notes=$6
+       WHERE id=$7 RETURNING *`,
+      [titre, date_service, heure_debut || '', heure_fin || '', statut || 'planifiee', notes || '', req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Patrouille introuvable.' });
+
+    if (Array.isArray(agent_ids)) {
+      await pool.query('DELETE FROM patrouille_agents WHERE patrouille_id = $1', [req.params.id]);
+      for (const uid of agent_ids) {
+        await pool.query('INSERT INTO patrouille_agents (patrouille_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, uid]);
+      }
+    }
+
+    res.json({ patrouille: rows[0] });
+  } catch (err) {
+    console.error('[patrouilles/update]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

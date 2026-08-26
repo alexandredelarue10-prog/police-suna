@@ -184,12 +184,21 @@ CREATE TABLE IF NOT EXISTS patrouilles (
   date_service DATE NOT NULL,
   heure_debut VARCHAR(10) DEFAULT '',
   heure_fin VARCHAR(10) DEFAULT '',
-  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- ancien champ (agent unique), conservé pour migration douce
+  statut VARCHAR(20) NOT NULL DEFAULT 'planifiee', -- planifiee | en_cours | terminee | annulee
   notes TEXT DEFAULT '',
   cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE patrouilles ADD COLUMN IF NOT EXISTS statut VARCHAR(20) NOT NULL DEFAULT 'planifiee';
 CREATE INDEX IF NOT EXISTS idx_patrouilles_date ON patrouilles(date_service);
+
+-- Agents assignés à une patrouille : plusieurs personnes possibles par service
+CREATE TABLE IF NOT EXISTS patrouille_agents (
+  patrouille_id INTEGER NOT NULL REFERENCES patrouilles(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (patrouille_id, user_id)
+);
 
 -- PARAMÈTRES DU SITE (clé/valeur) : ex. crédits en pied de page, modifiables uniquement par DEV
 CREATE TABLE IF NOT EXISTS site_settings (

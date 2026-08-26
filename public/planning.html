@@ -12,7 +12,7 @@
       <div class="section-head">
         <div>
           <h1 class="mb-0">Planning de service</h1>
-          <p class="muted">Patrouilles et services à venir.</p>
+          <p class="muted">Patrouilles et services à venir, avec un ou plusieurs agents assignés.</p>
         </div>
         <button class="btn btn-primary hidden" id="new-btn">+ Planifier un service</button>
       </div>
@@ -22,8 +22,9 @@
 
   <div class="modal-backdrop" id="patrol-modal">
     <div class="modal">
-      <h3>Planifier un service</h3>
+      <h3 id="modal-title">Planifier un service</h3>
       <form id="patrol-form">
+        <input type="hidden" id="p-id" />
         <div class="field">
           <label for="p-titre">Titre *</label>
           <input type="text" id="p-titre" placeholder="Ex : Patrouille marché central" required />
@@ -43,16 +44,26 @@
           </div>
         </div>
         <div class="field">
-          <label for="p-agent">Agent assigné</label>
-          <select id="p-agent"><option value="">— Non assigné —</option></select>
+          <label for="p-statut">Statut</label>
+          <select id="p-statut">
+            <option value="planifiee">Planifiée</option>
+            <option value="en_cours">En cours</option>
+            <option value="terminee">Terminée</option>
+            <option value="annulee">Annulée</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Agents assignés</label>
+          <div id="p-agents" style="max-height:180px; overflow-y:auto; border:1px solid rgba(23,21,15,0.15); border-radius:4px; padding:8px"></div>
         </div>
         <div class="field">
           <label for="p-notes">Notes</label>
           <textarea id="p-notes" rows="2"></textarea>
         </div>
         <div class="modal-close-row">
+          <button type="button" class="btn btn-danger hidden" id="delete-btn" style="margin-right:auto">Supprimer</button>
           <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
-          <button type="submit" class="btn btn-primary">Planifier</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
         </div>
       </form>
     </div>
@@ -61,7 +72,14 @@
   <script src="js/api.js"></script>
   <script src="js/common.js"></script>
   <script>
-    let user;
+    let user, usersCache = [], patrouillesCache = [];
+    const statutLabels = {
+      planifiee: ['Planifiée', 'badge-warn'],
+      en_cours: ['En cours', 'badge-danger'],
+      terminee: ['Terminée', 'badge-ok'],
+      annulee: ['Annulée', 'badge-muted'],
+    };
+
     (async function () {
       user = await initLayout({ activeKey: 'planning', requireAuth: true });
       if (!user) return;
@@ -69,21 +87,18 @@
         document.getElementById('new-btn').classList.remove('hidden');
         try {
           const { users } = await api('/users');
-          const select = document.getElementById('p-agent');
-          users.filter(u => u.statut === 'approuve').forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.id;
-            opt.textContent = u.nom_complet || u.username;
-            select.appendChild(opt);
-          });
+          usersCache = users.filter(u => u.statut === 'approuve');
+          document.getElementById('p-agents').innerHTML = usersCache.map(u => `
+            <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-weight:400; font-size:0.85rem; padding:3px 0; cursor:pointer">
+              <input type="checkbox" class="agent-check" value="${u.id}" style="width:auto" /> ${escapeHtml(u.nom_complet || u.username)}
+            </label>
+          `).join('');
         } catch (_) { /* silencieux */ }
       }
-      document.getElementById('new-btn').addEventListener('click', () => {
-        document.getElementById('patrol-form').reset();
-        document.getElementById('patrol-modal').classList.add('open');
-      });
+      document.getElementById('new-btn').addEventListener('click', () => openModal());
       document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('patrol-modal').classList.remove('open'));
       document.getElementById('patrol-form').addEventListener('submit', savePatrol);
+      document.getElementById('delete-btn').addEventListener('click', deletePatrol);
       loadPlanning();
     })();
 
@@ -91,6 +106,7 @@
       const container = document.getElementById('planning-content');
       try {
         const { patrouilles } = await api('/patrouilles');
+        patrouillesCache = patrouilles;
         if (patrouilles.length === 0) {
           container.innerHTML = '<div class="empty-state">Aucun service planifié pour le moment.</div>';
           return;
@@ -101,49 +117,88 @@
         container.innerHTML = Object.entries(byDate).map(([date, items]) => `
           <div style="margin-bottom:22px">
             <h3 style="font-size:0.95rem; color:var(--or-300)">${formatDate(date)}</h3>
-            ${items.map(p => `
-              <div class="card" style="margin-bottom:8px; padding:14px 18px">
+            ${items.map(p => {
+              const [label, cls] = statutLabels[p.statut] || ['—', 'badge-muted'];
+              const agentsNoms = (p.agents || []).map(a => a.nom);
+              return `
+              <div class="card" style="margin-bottom:8px; padding:14px 18px; ${user.permissions.peut_valider_comptes ? 'cursor:pointer' : ''}" ${user.permissions.peut_valider_comptes ? `data-open="${p.id}"` : ''}>
                 <div class="flex-between">
                   <div>
-                    <strong>${escapeHtml(p.titre)}</strong>
-                    <p class="muted mb-0" style="font-size:0.82rem">
+                    <span class="badge ${cls}">${label}</span>
+                    <strong style="margin-left:6px">${escapeHtml(p.titre)}</strong>
+                    <p class="muted mb-0" style="font-size:0.82rem; margin-top:4px">
                       ${p.heure_debut || '—'}${p.heure_fin ? ' – ' + p.heure_fin : ''}
-                      ${p.agent_nom || p.agent_username ? ' · ' + escapeHtml(p.agent_nom || p.agent_username) : ' · Non assigné'}
+                      · ${agentsNoms.length ? escapeHtml(agentsNoms.join(', ')) : 'Non assigné'}
                     </p>
                     ${p.notes ? `<p class="mb-0" style="font-size:0.82rem">${escapeHtml(p.notes)}</p>` : ''}
                   </div>
-                  ${user.permissions.peut_valider_comptes ? `<button class="btn btn-danger btn-sm" data-delete="${p.id}">Suppr.</button>` : ''}
                 </div>
               </div>
-            `).join('')}
+            `; }).join('')}
           </div>
         `).join('');
 
-        container.querySelectorAll('[data-delete]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            if (!confirm('Annuler ce service ?')) return;
-            try { await api(`/patrouilles/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Service annulé.'); loadPlanning(); }
-            catch (err) { toast(err.message, 'error'); }
+        if (user.permissions.peut_valider_comptes) {
+          container.querySelectorAll('[data-open]').forEach(card => {
+            card.addEventListener('click', () => openModal(patrouillesCache.find(p => p.id == card.dataset.open)));
           });
-        });
+        }
       } catch (err) {
         container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       }
     }
 
+    function openModal(patrouille = null) {
+      document.getElementById('patrol-form').reset();
+      document.querySelectorAll('.agent-check').forEach(c => { c.checked = false; });
+      if (patrouille) {
+        document.getElementById('modal-title').textContent = 'Modifier le service';
+        document.getElementById('p-id').value = patrouille.id;
+        document.getElementById('p-titre').value = patrouille.titre;
+        document.getElementById('p-date').value = String(patrouille.date_service).slice(0, 10);
+        document.getElementById('p-debut').value = patrouille.heure_debut || '';
+        document.getElementById('p-fin').value = patrouille.heure_fin || '';
+        document.getElementById('p-statut').value = patrouille.statut || 'planifiee';
+        document.getElementById('p-notes').value = patrouille.notes || '';
+        const agentIds = (patrouille.agents || []).map(a => a.id);
+        document.querySelectorAll('.agent-check').forEach(c => { c.checked = agentIds.includes(parseInt(c.value)); });
+        document.getElementById('delete-btn').classList.remove('hidden');
+      } else {
+        document.getElementById('modal-title').textContent = 'Planifier un service';
+        document.getElementById('p-id').value = '';
+        document.getElementById('delete-btn').classList.add('hidden');
+      }
+      document.getElementById('patrol-modal').classList.add('open');
+    }
+
     async function savePatrol(e) {
       e.preventDefault();
+      const id = document.getElementById('p-id').value;
+      const agent_ids = [...document.querySelectorAll('.agent-check:checked')].map(c => parseInt(c.value));
       const payload = {
         titre: document.getElementById('p-titre').value.trim(),
         date_service: document.getElementById('p-date').value,
         heure_debut: document.getElementById('p-debut').value.trim(),
         heure_fin: document.getElementById('p-fin').value.trim(),
-        agent_id: document.getElementById('p-agent').value || null,
+        statut: document.getElementById('p-statut').value,
         notes: document.getElementById('p-notes').value.trim(),
+        agent_ids,
       };
       try {
-        await api('/patrouilles', { method: 'POST', body: payload });
-        toast('Service planifié.');
+        if (id) await api(`/patrouilles/${id}`, { method: 'PUT', body: payload });
+        else await api('/patrouilles', { method: 'POST', body: payload });
+        toast('Service enregistré.');
+        document.getElementById('patrol-modal').classList.remove('open');
+        loadPlanning();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function deletePatrol() {
+      const id = document.getElementById('p-id').value;
+      if (!id || !confirm('Annuler ce service ?')) return;
+      try {
+        await api(`/patrouilles/${id}`, { method: 'DELETE' });
+        toast('Service annulé.');
         document.getElementById('patrol-modal').classList.remove('open');
         loadPlanning();
       } catch (err) { toast(err.message, 'error'); }
