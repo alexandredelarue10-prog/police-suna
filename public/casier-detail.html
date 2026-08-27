@@ -192,6 +192,45 @@
 
     // Regroupe les infractions ajoutées ensemble (même groupe_id) dans un seul bandeau,
     // avec le total des amendes additionné, pour éviter de saturer le casier de petites lignes.
+    // Analyse un texte de type "10 min", "2h", "1 jour", "Jugement"... et additionne ce qui est
+    // quantifiable (converti en minutes), en gardant à part les mentions non chiffrées (ex: "Jugement").
+    function sumCellules(texts) {
+      let totalMinutes = 0;
+      let hasNumeric = false;
+      const nonNumeric = new Set();
+
+      texts.filter(Boolean).forEach((raw) => {
+        // Un texte peut contenir plusieurs mentions séparées par "/" ou "+" (ex: "10 min / T.I.G")
+        raw.split(/[/+]/).map(s => s.trim()).filter(Boolean).forEach((part) => {
+          const m = part.match(/(\d+(?:[.,]\d+)?)\s*(jour|jours|j|heure|heures|h|min|minute|minutes)\b/i);
+          if (m) {
+            hasNumeric = true;
+            const value = parseFloat(m[1].replace(',', '.'));
+            const unit = m[2].toLowerCase();
+            if (unit.startsWith('j')) totalMinutes += value * 1440;
+            else if (unit.startsWith('h')) totalMinutes += value * 60;
+            else totalMinutes += value;
+          } else {
+            nonNumeric.add(part);
+          }
+        });
+      });
+
+      let totalLabel = '';
+      if (hasNumeric) {
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = Math.round(totalMinutes % 60);
+        const parts = [];
+        if (days) parts.push(`${days} j`);
+        if (hours) parts.push(`${hours} h`);
+        if (minutes || parts.length === 0) parts.push(`${minutes} min`);
+        totalLabel = parts.join(' ');
+      }
+
+      return { totalLabel, nonNumeric: [...nonNumeric] };
+    }
+
     function renderInfractionsGrouped(infractions, canManage) {
       const groups = {};
       const standalone = [];
@@ -207,7 +246,7 @@
 
       Object.values(groups).forEach((items) => {
         const totalAmende = items.reduce((sum, i) => sum + (i.amende_appliquee || 0), 0);
-        const cellules = [...new Set(items.map(i => i.cellule_appliquee).filter(Boolean))];
+        const { totalLabel, nonNumeric } = sumCellules(items.map(i => i.cellule_appliquee));
         const first = items[0];
         blocks.push({ sortKey: first.created_at, html: `
           <div class="card infraction-groupe" style="margin-bottom:14px">
@@ -225,7 +264,7 @@
                 <li>
                   <span>${escapeHtml(i.titre)}${i.occurrence_recidive ? ` <span class="badge badge-warn" style="margin-left:4px">${escapeHtml(i.occurrence_recidive)}</span>` : ''}</span>
                   <span class="flex gap-8" style="align-items:center">
-                    <span class="muted" style="font-size:0.8rem">${i.amende_appliquee ? i.amende_appliquee.toLocaleString('fr-FR') + ' ryō' : '—'}</span>
+                    <span class="muted" style="font-size:0.8rem">${i.amende_appliquee ? i.amende_appliquee.toLocaleString('fr-FR') + ' ryō' : '—'}${i.cellule_appliquee ? ' · ' + escapeHtml(i.cellule_appliquee) : ''}</span>
                     ${canManage ? `<button class="btn btn-secondary btn-sm" data-del-infraction="${i.id}" style="padding:2px 8px; font-size:0.72rem">✕</button>` : ''}
                   </span>
                 </li>
@@ -235,7 +274,11 @@
               <span>Total amendes</span>
               <strong>${totalAmende.toLocaleString('fr-FR')} ryō</strong>
             </div>
-            ${cellules.length ? `<p class="muted mb-0" style="font-size:0.8rem; margin-top:6px"><strong>Cellule/T.I.G :</strong> ${cellules.map(escapeHtml).join(' · ')}</p>` : ''}
+            ${totalLabel ? `<div class="infraction-groupe-total" style="border-top:none; padding-top:4px; margin-top:4px">
+              <span>Total cellule / T.I.G</span>
+              <strong>${totalLabel}</strong>
+            </div>` : ''}
+            ${nonNumeric.length ? `<p class="muted mb-0" style="font-size:0.78rem; margin-top:6px">Également concerné : ${nonNumeric.map(escapeHtml).join(' · ')}</p>` : ''}
           </div>
         `});
       });
