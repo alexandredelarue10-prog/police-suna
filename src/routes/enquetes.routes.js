@@ -40,8 +40,17 @@ router.get('/:id', requireAuth, requirePole('Enquête'), async (req, res) => {
        JOIN plaintes p ON p.id = ep.plainte_id WHERE ep.enquete_id = $1`,
       [req.params.id]
     );
+    const { rows: evenements } = await pool.query(
+      `SELECT ev.*, u.username AS cree_par_username FROM enquete_evenements ev
+       LEFT JOIN users u ON u.id = ev.cree_par WHERE ev.enquete_id = $1 ORDER BY ev.date_evenement, ev.created_at`,
+      [req.params.id]
+    );
+    const { rows: pieces } = await pool.query(
+      'SELECT * FROM enquete_pieces WHERE enquete_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    );
 
-    res.json({ enquete: enqueteRows[0], casiers, plaintes });
+    res.json({ enquete: enqueteRows[0], casiers, plaintes, evenements, pieces });
   } catch (err) {
     console.error('[enquetes/detail]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
@@ -140,6 +149,61 @@ router.delete('/:id/plaintes/:plainteId', requireAuth, requirePole('Enquête'), 
     res.json({ message: 'Plainte déliée.' });
   } catch (err) {
     console.error('[enquetes/plaintes/unlink]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Chronologie de l'enquête ---
+router.post('/:id/evenements', requireAuth, requirePole('Enquête'), async (req, res) => {
+  try {
+    const { date_evenement, description } = req.body;
+    if (!description) return res.status(400).json({ error: 'La description est requise.' });
+    const { rows } = await pool.query(
+      `INSERT INTO enquete_evenements (enquete_id, date_evenement, description, cree_par) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.params.id, date_evenement || null, description, req.session.user.id]
+    );
+    await pool.query('UPDATE enquetes SET updated_at = now() WHERE id = $1', [req.params.id]);
+    res.status(201).json({ evenement: rows[0] });
+  } catch (err) {
+    console.error('[enquetes/evenements/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/evenements/:evenementId', requireAuth, requirePole('Enquête'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM enquete_evenements WHERE id = $1 RETURNING id', [req.params.evenementId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Événement introuvable.' });
+    res.json({ message: 'Événement supprimé.' });
+  } catch (err) {
+    console.error('[enquetes/evenements/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Pièces à conviction ---
+router.post('/:id/pieces', requireAuth, requirePole('Enquête'), async (req, res) => {
+  try {
+    const { nom, description, localisation } = req.body;
+    if (!nom) return res.status(400).json({ error: 'Le nom de la pièce est requis.' });
+    const { rows } = await pool.query(
+      `INSERT INTO enquete_pieces (enquete_id, nom, description, localisation) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.params.id, nom, description || '', localisation || '']
+    );
+    res.status(201).json({ piece: rows[0] });
+  } catch (err) {
+    console.error('[enquetes/pieces/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/pieces/:pieceId', requireAuth, requirePole('Enquête'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM enquete_pieces WHERE id = $1 RETURNING id', [req.params.pieceId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Pièce introuvable.' });
+    res.json({ message: 'Pièce retirée.' });
+  } catch (err) {
+    console.error('[enquetes/pieces/delete]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

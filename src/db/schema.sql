@@ -337,6 +337,147 @@ CREATE SEQUENCE IF NOT EXISTS matricule_seq START 1;
 -- Séquence dédiée aux numéros de plainte, même logique de sécurité.
 CREATE SEQUENCE IF NOT EXISTS plainte_numero_seq START 1;
 
+-- ============================================================
+-- Compléments : enquête (chronologie, pièces), sécurité (entrées/sorties,
+-- escortes, zones), administratif (congés, évaluations), casiers (mandats,
+-- photos), annonces internes, annuaire, historique de connexion.
+-- ============================================================
+
+-- Historique de connexion
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;
+
+-- PÔLE ENQUÊTE : chronologie des événements d'un dossier
+CREATE TABLE IF NOT EXISTS enquete_evenements (
+  id SERIAL PRIMARY KEY,
+  enquete_id INTEGER NOT NULL REFERENCES enquetes(id) ON DELETE CASCADE,
+  date_evenement DATE,
+  description TEXT NOT NULL,
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_enquete_evenements_enquete ON enquete_evenements(enquete_id);
+
+-- PÔLE ENQUÊTE : pièces à conviction
+CREATE TABLE IF NOT EXISTS enquete_pieces (
+  id SERIAL PRIMARY KEY,
+  enquete_id INTEGER NOT NULL REFERENCES enquetes(id) ON DELETE CASCADE,
+  nom VARCHAR(150) NOT NULL,
+  description TEXT DEFAULT '',
+  localisation VARCHAR(150) DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_enquete_pieces_enquete ON enquete_pieces(enquete_id);
+
+-- PÔLE SÉCURITÉ : registre des entrées et sorties du village
+CREATE TABLE IF NOT EXISTS entrees_sorties (
+  id SERIAL PRIMARY KEY,
+  nom_personne VARCHAR(150) NOT NULL,
+  type VARCHAR(10) NOT NULL DEFAULT 'entree', -- entree | sortie
+  motif VARCHAR(200) DEFAULT '',
+  date_passage TIMESTAMPTZ NOT NULL DEFAULT now(),
+  agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_entrees_sorties_date ON entrees_sorties(date_passage DESC);
+
+-- PÔLE SÉCURITÉ : escortes diplomatiques
+CREATE TABLE IF NOT EXISTS escortes (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL,
+  destination VARCHAR(150) DEFAULT '',
+  personnalite VARCHAR(150) DEFAULT '',
+  date_debut DATE,
+  date_fin DATE,
+  statut VARCHAR(20) NOT NULL DEFAULT 'planifiee', -- planifiee | en_cours | terminee | annulee
+  notes TEXT DEFAULT '',
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS escorte_agents (
+  escorte_id INTEGER NOT NULL REFERENCES escortes(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (escorte_id, user_id)
+);
+
+-- PÔLE SÉCURITÉ : niveau de sécurité par zone du village
+CREATE TABLE IF NOT EXISTS zones_securite (
+  id SERIAL PRIMARY KEY,
+  nom VARCHAR(100) NOT NULL UNIQUE,
+  niveau INTEGER NOT NULL DEFAULT 1, -- 1 (calme) à 5 (critique)
+  description TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- PÔLE ADMINISTRATIF : demandes de congé
+CREATE TABLE IF NOT EXISTS conges (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date_debut DATE NOT NULL,
+  date_fin DATE NOT NULL,
+  motif TEXT DEFAULT '',
+  statut VARCHAR(20) NOT NULL DEFAULT 'en_attente', -- en_attente | approuve | refuse
+  valide_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_conges_user ON conges(user_id);
+
+-- PÔLE ADMINISTRATIF : évaluations périodiques des inspecteurs
+CREATE TABLE IF NOT EXISTS evaluations (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  evaluateur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  note INTEGER NOT NULL DEFAULT 3, -- 1 à 5
+  commentaire TEXT DEFAULT '',
+  date_evaluation DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_evaluations_user ON evaluations(user_id);
+
+-- CASIERS : mandats d'arrêt formels
+CREATE TABLE IF NOT EXISTS mandats (
+  id SERIAL PRIMARY KEY,
+  casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
+  type VARCHAR(60) NOT NULL DEFAULT 'arrestation', -- arrestation | perquisition | comparution
+  motif TEXT DEFAULT '',
+  emis_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  date_emission DATE NOT NULL DEFAULT CURRENT_DATE,
+  actif BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mandats_casier ON mandats(casier_id);
+
+-- CASIERS : galerie de photos
+CREATE TABLE IF NOT EXISTS casier_photos (
+  id SERIAL PRIMARY KEY,
+  casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  legende VARCHAR(150) DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_casier_photos_casier ON casier_photos(casier_id);
+
+-- ANNONCES INTERNES (distinctes des communiqués publics de l'accueil)
+CREATE TABLE IF NOT EXISTS annonces_internes (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL,
+  contenu TEXT NOT NULL,
+  auteur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ANNUAIRE DES HABITANTS (contexte RP, pas forcément fichés judiciairement)
+CREATE TABLE IF NOT EXISTS habitants (
+  id SERIAL PRIMARY KEY,
+  nom VARCHAR(80) NOT NULL,
+  prenom VARCHAR(80) DEFAULT '',
+  village VARCHAR(80) DEFAULT '',
+  profession VARCHAR(120) DEFAULT '',
+  description TEXT DEFAULT '',
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_habitants_nom ON habitants(nom);
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

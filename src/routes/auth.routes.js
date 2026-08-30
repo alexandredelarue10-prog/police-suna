@@ -134,6 +134,7 @@ router.post('/login', async (req, res) => {
 
     const sessionUser = await buildSessionUser(user);
     req.session.user = sessionUser;
+    await pool.query('UPDATE users SET last_login = now() WHERE id = $1', [user.id]);
     res.json({ user: sessionUser });
   } catch (err) {
     console.error('[auth/login]', err);

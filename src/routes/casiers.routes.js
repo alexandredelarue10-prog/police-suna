@@ -68,8 +68,17 @@ router.get('/:id', requireAuth, async (req, res) => {
        WHERE ci.casier_id = $1 ORDER BY ci.date_infraction DESC, ci.created_at DESC`,
       [req.params.id]
     );
+    const { rows: mandats } = await pool.query(
+      `SELECT m.*, u.username AS emis_par_username FROM mandats m
+       LEFT JOIN users u ON u.id = m.emis_par WHERE m.casier_id = $1 ORDER BY m.date_emission DESC`,
+      [req.params.id]
+    );
+    const { rows: photos } = await pool.query(
+      'SELECT * FROM casier_photos WHERE casier_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    );
 
-    res.json({ casier: casierRows[0], infractions });
+    res.json({ casier: casierRows[0], infractions, mandats, photos });
   } catch (err) {
     console.error('[casiers/detail]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
@@ -230,6 +239,93 @@ router.delete('/infractions/:infractionId', requireAuth, requirePermission('peut
     res.json({ message: 'Infraction supprimée.' });
   } catch (err) {
     console.error('[casiers/infractions/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Mandats d'arrêt formels ---
+router.post('/:id/mandats', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { type, motif } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO mandats (casier_id, type, motif, emis_par) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.params.id, type || 'arrestation', motif || '', req.session.user.id]
+    );
+    res.status(201).json({ mandat: rows[0] });
+  } catch (err) {
+    console.error('[casiers/mandats/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.patch('/mandats/:mandatId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { actif } = req.body;
+    const { rows } = await pool.query('UPDATE mandats SET actif = $1 WHERE id = $2 RETURNING *', [!!actif, req.params.mandatId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Mandat introuvable.' });
+    res.json({ mandat: rows[0] });
+  } catch (err) {
+    console.error('[casiers/mandats/update]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/mandats/:mandatId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM mandats WHERE id = $1 RETURNING id', [req.params.mandatId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Mandat introuvable.' });
+    res.json({ message: 'Mandat supprimé.' });
+  } catch (err) {
+    console.error('[casiers/mandats/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Galerie de photos ---
+router.post('/:id/photos', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { url, legende } = req.body;
+    if (!url) return res.status(400).json({ error: "L'URL de la photo est requise." });
+    const { rows } = await pool.query(
+      'INSERT INTO casier_photos (casier_id, url, legende) VALUES ($1,$2,$3) RETURNING *',
+      [req.params.id, url, legende || '']
+    );
+    res.status(201).json({ photo: rows[0] });
+  } catch (err) {
+    console.error('[casiers/photos/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/photos/:photoId', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM casier_photos WHERE id = $1 RETURNING id', [req.params.photoId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Photo introuvable.' });
+    res.json({ message: 'Photo supprimée.' });
+  } catch (err) {
+    console.error('[casiers/photos/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// GET /api/casiers/export/csv — export CSV de tous les casiers (léger, sans dépendance externe)
+router.get('/export/csv', requireAuth, requirePermission('peut_gerer_casiers'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id, nom, prenom, surnom, village, age, statut, niveau_danger, created_at FROM casiers ORDER BY id');
+    const escapeCsv = (v) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['ID', 'Nom', 'Prenom', 'Surnom', 'Village', 'Age', 'Statut', 'Niveau danger', 'Cree le'];
+    const lines = [header.join(',')];
+    rows.forEach((c) => {
+      lines.push([c.id, c.nom, c.prenom, c.surnom, c.village, c.age, c.statut, c.niveau_danger, c.created_at ? c.created_at.toISOString().slice(0, 10) : ''].map(escapeCsv).join(','));
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="casiers.csv"');
+    res.send('\uFEFF' + lines.join('\n')); // BOM pour un bon affichage des accents dans Excel
+  } catch (err) {
+    console.error('[casiers/export-csv]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

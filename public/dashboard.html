@@ -18,6 +18,14 @@
 
       <div id="pending-alert"></div>
 
+      <div id="annonces-section" class="hidden" style="margin-bottom:32px">
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.1rem">Annonces internes</h2>
+          <button class="btn btn-secondary btn-sm hidden" id="new-annonce-btn">+ Publier</button>
+        </div>
+        <div id="annonces-list"></div>
+      </div>
+
       <div class="grid grid-3" id="quick-links"></div>
 
       <div id="recent-activity-section" class="hidden" style="margin-top:36px">
@@ -27,6 +35,20 @@
         </div>
         <div id="recent-activity-list"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="annonce-modal">
+    <div class="modal">
+      <h3>Nouvelle annonce interne</h3>
+      <form id="annonce-form">
+        <div class="field"><label for="a-titre">Titre *</label><input type="text" id="a-titre" required /></div>
+        <div class="field"><label for="a-contenu">Contenu *</label><textarea id="a-contenu" rows="4" required></textarea></div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="annonce-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Publier</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -93,7 +115,54 @@
           }
         } catch (_) { /* silencieux */ }
       }
+
+      if (user.permissions.peut_gerer_actus) {
+        document.getElementById('new-annonce-btn').classList.remove('hidden');
+        document.getElementById('new-annonce-btn').addEventListener('click', () => {
+          document.getElementById('annonce-form').reset();
+          document.getElementById('annonce-modal').classList.add('open');
+        });
+        document.getElementById('annonce-cancel').addEventListener('click', () => document.getElementById('annonce-modal').classList.remove('open'));
+        document.getElementById('annonce-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          try {
+            await api('/interne/annonces', {
+              method: 'POST',
+              body: { titre: document.getElementById('a-titre').value.trim(), contenu: document.getElementById('a-contenu').value.trim() },
+            });
+            toast('Annonce publiée.');
+            document.getElementById('annonce-modal').classList.remove('open');
+            loadAnnonces();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      }
+      loadAnnonces();
     })();
+
+    async function loadAnnonces() {
+      try {
+        const { annonces } = await api('/interne/annonces');
+        if (annonces.length === 0) return;
+        document.getElementById('annonces-section').classList.remove('hidden');
+        document.getElementById('annonces-list').innerHTML = annonces.slice(0, 5).map(a => `
+          <div class="card" style="margin-bottom:10px">
+            <div class="flex-between" style="align-items:flex-start">
+              <div>
+                <strong style="font-size:0.95rem">${escapeHtml(a.titre)}</strong>
+                <p class="muted mb-0" style="font-size:0.76rem">${escapeHtml(a.auteur_username || '—')} · ${formatDateTime(a.created_at)}</p>
+              </div>
+              ${CURRENT_USER.permissions.peut_gerer_actus ? `<button class="btn btn-danger btn-sm" data-del-annonce="${a.id}">✕</button>` : ''}
+            </div>
+            <p style="font-size:0.86rem; margin-top:6px">${escapeHtml(a.contenu)}</p>
+          </div>
+        `).join('');
+        document.querySelectorAll('[data-del-annonce]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try { await api(`/interne/annonces/${btn.dataset.delAnnonce}`, { method: 'DELETE' }); loadAnnonces(); } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (_) { /* silencieux */ }
+    }
   </script>
 </body>
 </html>

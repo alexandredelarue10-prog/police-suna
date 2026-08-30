@@ -195,7 +195,7 @@
         const lockReason = u.protege ? 'Compte protégé' : 'Vous ne pouvez pas modifier votre propre grade/rang/pôles';
         return `
           <tr>
-            <td>${escapeHtml(u.username)}${u.protege ? ' <span class="badge badge-warn">Protégé</span>' : ''}</td>
+            <td>${escapeHtml(u.username)}${u.protege ? ' <span class="badge badge-warn">Protégé</span>' : ''}<div class="muted" style="font-size:0.72rem">${u.last_login ? 'Connecté le ' + formatDate(u.last_login) : 'Jamais connecté'}</div></td>
             <td>${escapeHtml(u.nom_complet || '—')}</td>
             <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.grade_nom || '—')} 🔒</span>` : gradeSelectHtml(u.grade_id)}</td>
             <td>${locked ? `<span class="muted" title="${lockReason}">${escapeHtml(u.rang_nom || '—')} 🔒</span>` : rangSelectHtml(u.rang_id)}</td>

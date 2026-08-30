@@ -120,4 +120,147 @@ router.delete('/formations/:id', requireAuth, requirePole('Administratif'), asyn
   }
 });
 
+// --- Demandes de congé ---
+// Tout membre approuvé peut faire une demande ; seul le pôle Administratif peut la traiter.
+router.get('/conges', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.*, u.username AS demandeur_username, u.nom_complet AS demandeur_nom, v.username AS valide_par_username
+       FROM conges c
+       JOIN users u ON u.id = c.user_id
+       LEFT JOIN users v ON v.id = c.valide_par
+       ORDER BY (c.statut = 'en_attente') DESC, c.date_debut DESC`
+    );
+    res.json({ conges: rows });
+  } catch (err) {
+    console.error('[administratif/conges/list]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// POST — ouvert à tout membre connecté (demande sa propre absence)
+router.post('/conges', requireAuth, async (req, res) => {
+  try {
+    const { date_debut, date_fin, motif } = req.body;
+    if (!date_debut || !date_fin) return res.status(400).json({ error: 'Les dates sont requises.' });
+    const { rows } = await pool.query(
+      `INSERT INTO conges (user_id, date_debut, date_fin, motif) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.session.user.id, date_debut, date_fin, motif || '']
+    );
+    res.status(201).json({ conge: rows[0] });
+  } catch (err) {
+    console.error('[administratif/conges/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// GET — un membre voit ses propres demandes
+router.get('/conges/moi', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM conges WHERE user_id = $1 ORDER BY created_at DESC', [req.session.user.id]);
+    res.json({ conges: rows });
+  } catch (err) {
+    console.error('[administratif/conges/moi]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.patch('/conges/:id', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { statut } = req.body;
+    if (!['approuve', 'refuse', 'en_attente'].includes(statut)) return res.status(400).json({ error: 'Statut invalide.' });
+    const { rows } = await pool.query(
+      'UPDATE conges SET statut=$1, valide_par=$2 WHERE id=$3 RETURNING *',
+      [statut, req.session.user.id, req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Demande introuvable.' });
+    res.json({ conge: rows[0] });
+  } catch (err) {
+    console.error('[administratif/conges/update]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/conges/:id', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM conges WHERE id = $1 RETURNING id', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Demande introuvable.' });
+    res.json({ message: 'Demande supprimée.' });
+  } catch (err) {
+    console.error('[administratif/conges/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Évaluations périodiques ---
+router.get('/evaluations/:userId', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT ev.*, u.username AS evaluateur_username FROM evaluations ev
+       LEFT JOIN users u ON u.id = ev.evaluateur_id WHERE ev.user_id = $1 ORDER BY ev.date_evaluation DESC`,
+      [req.params.userId]
+    );
+    res.json({ evaluations: rows });
+  } catch (err) {
+    console.error('[administratif/evaluations/list]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.post('/evaluations', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { user_id, note, commentaire, date_evaluation } = req.body;
+    if (!user_id || !note) return res.status(400).json({ error: 'Agent et note sont requis.' });
+    const { rows } = await pool.query(
+      `INSERT INTO evaluations (user_id, evaluateur_id, note, commentaire, date_evaluation)
+       VALUES ($1,$2,$3,$4,COALESCE($5, CURRENT_DATE)) RETURNING *`,
+      [user_id, req.session.user.id, note, commentaire || '', date_evaluation || null]
+    );
+    res.status(201).json({ evaluation: rows[0] });
+  } catch (err) {
+    console.error('[administratif/evaluations/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.delete('/evaluations/:id', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM evaluations WHERE id = $1 RETURNING id', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Évaluation introuvable.' });
+    res.json({ message: 'Évaluation supprimée.' });
+  } catch (err) {
+    console.error('[administratif/evaluations/delete]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Statistiques des comptes (lecture seule, sans droits de validation/suppression) ---
+router.get('/stats-comptes', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { rows: totaux } = await pool.query('SELECT statut, COUNT(*)::int AS n FROM users GROUP BY statut');
+    const { rows: parGrade } = await pool.query(`
+      SELECT COALESCE(g.nom, 'Sans grade') AS grade, COUNT(*)::int AS n
+      FROM users u LEFT JOIN grades g ON g.id = u.grade_id
+      WHERE u.statut = 'approuve' GROUP BY grade ORDER BY n DESC
+    `);
+    const { rows: parPole } = await pool.query(`
+      SELECT p.nom AS pole, COUNT(*)::int AS n FROM user_poles up JOIN poles p ON p.id = up.pole_id
+      GROUP BY p.nom ORDER BY n DESC
+    `);
+    const { rows: liste } = await pool.query(`
+      SELECT u.id, u.username, u.nom_complet, u.matricule, u.statut, u.created_at, u.last_login,
+             g.nom AS grade_nom, r.nom AS rang_nom,
+             COALESCE((SELECT json_agg(p.nom) FROM user_poles up JOIN poles p ON p.id=up.pole_id WHERE up.user_id=u.id), '[]') AS poles
+      FROM users u
+      LEFT JOIN grades g ON g.id = u.grade_id
+      LEFT JOIN rangs_ninja r ON r.id = u.rang_id
+      ORDER BY u.created_at DESC
+    `);
+    res.json({ totaux, parGrade, parPole, liste });
+  } catch (err) {
+    console.error('[administratif/stats-comptes]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;

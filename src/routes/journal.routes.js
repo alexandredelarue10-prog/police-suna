@@ -14,6 +14,7 @@ const ACTION_LABELS = {
   formation_creee: 'Formation créée',
   enquete_ouverte: 'Dossier d\'enquête ouvert',
   incident_signale: 'Incident de sécurité signalé',
+  escorte_creee: 'Escorte diplomatique créée',
   casier_cree: 'Casier créé',
   casier_supprime: 'Casier supprimé',
   infraction_ajoutee: 'Infraction ajoutée',

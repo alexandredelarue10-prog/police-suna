@@ -29,7 +29,7 @@ router.get('/pending-count', requireAuth, requirePermission('peut_valider_compte
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege,
+      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
               r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur,
               COALESCE(

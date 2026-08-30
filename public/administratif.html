@@ -37,6 +37,62 @@
         </div>
         <div id="formations-list"><div class="loader">Chargement…</div></div>
       </section>
+
+      <section>
+        <h2 style="font-size:1.1rem">Demandes de congé</h2>
+        <div id="conges-list"><div class="loader">Chargement…</div></div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.1rem">Évaluations périodiques</h2>
+        </div>
+        <div class="field-row" style="max-width:400px">
+          <div class="field">
+            <label for="eval-agent">Agent</label>
+            <select id="eval-agent" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)"></select>
+          </div>
+          <div class="field" style="flex:0">
+            <button class="btn btn-primary" id="load-evals-btn">Voir le dossier</button>
+          </div>
+        </div>
+        <div id="evaluations-content"></div>
+      </section>
+
+      <section>
+        <h2 style="font-size:1.1rem">Statistiques des comptes</h2>
+        <div class="stat-row" id="comptes-totaux"></div>
+        <div class="grid grid-2" style="margin-top:16px">
+          <div class="card"><h3 style="font-size:0.95rem">Par grade</h3><div id="comptes-par-grade"></div></div>
+          <div class="card"><h3 style="font-size:0.95rem">Par pôle</h3><div id="comptes-par-pole"></div></div>
+        </div>
+        <div class="table-wrap" style="margin-top:16px">
+          <table>
+            <thead><tr><th>Utilisateur</th><th>Grade</th><th>Pôles</th><th>Dernière connexion</th></tr></thead>
+            <tbody id="comptes-liste"><tr><td colspan="4" class="loader">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="eval-modal">
+    <div class="modal">
+      <h3>Nouvelle évaluation</h3>
+      <form id="eval-form">
+        <div class="field">
+          <label for="ev-note">Note (1-5)</label>
+          <input type="number" id="ev-note" min="1" max="5" value="3" />
+        </div>
+        <div class="field">
+          <label for="ev-commentaire">Commentaire</label>
+          <textarea id="ev-commentaire" rows="3"></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="eval-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -115,8 +171,134 @@
       document.getElementById('formation-cancel').addEventListener('click', () => document.getElementById('formation-modal').classList.remove('open'));
       document.getElementById('formation-form').addEventListener('submit', saveFormation);
 
+      const evalSelect = document.getElementById('eval-agent');
+      usersCache.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.nom_complet || u.username;
+        evalSelect.appendChild(opt);
+      });
+      document.getElementById('load-evals-btn').addEventListener('click', () => loadEvaluations(evalSelect.value));
+      document.getElementById('eval-cancel').addEventListener('click', () => document.getElementById('eval-modal').classList.remove('open'));
+      document.getElementById('eval-form').addEventListener('submit', saveEvaluation);
+
       loadFormations();
+      loadConges();
+      loadStatsComptes();
     })();
+
+    // --- Congés ---
+    async function loadConges() {
+      const container = document.getElementById('conges-list');
+      try {
+        const { conges } = await api('/administratif/conges');
+        if (conges.length === 0) { container.innerHTML = '<div class="empty-state">Aucune demande de congé.</div>'; return; }
+        const statutBadge = { en_attente: 'badge-warn', approuve: 'badge-ok', refuse: 'badge-danger' };
+        container.innerHTML = conges.map(c => `
+          <div class="flex-between" style="padding:10px 0; border-bottom:1px solid rgba(217,192,139,0.12); flex-wrap:wrap; gap:8px">
+            <div>
+              <strong>${escapeHtml(c.demandeur_nom || c.demandeur_username)}</strong>
+              <span class="badge ${statutBadge[c.statut] || 'badge-muted'}" style="margin-left:6px">${c.statut}</span>
+              <p class="muted mb-0" style="font-size:0.8rem">${formatDate(c.date_debut)} → ${formatDate(c.date_fin)}${c.motif ? ' · ' + escapeHtml(c.motif) : ''}</p>
+            </div>
+            ${c.statut === 'en_attente' ? `<div class="flex gap-8">
+              <button class="btn btn-primary btn-sm" data-approve-conge="${c.id}">Approuver</button>
+              <button class="btn btn-danger btn-sm" data-refuse-conge="${c.id}">Refuser</button>
+            </div>` : ''}
+          </div>
+        `).join('');
+        container.querySelectorAll('[data-approve-conge]').forEach(btn => btn.addEventListener('click', async () => {
+          try { await api(`/administratif/conges/${btn.dataset.approveConge}`, { method: 'PATCH', body: { statut: 'approuve' } }); toast('Congé approuvé.'); loadConges(); } catch (err) { toast(err.message, 'error'); }
+        }));
+        container.querySelectorAll('[data-refuse-conge]').forEach(btn => btn.addEventListener('click', async () => {
+          try { await api(`/administratif/conges/${btn.dataset.refuseConge}`, { method: 'PATCH', body: { statut: 'refuse' } }); toast('Congé refusé.'); loadConges(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    // --- Évaluations ---
+    let currentEvalUserId = null;
+    async function loadEvaluations(userId) {
+      currentEvalUserId = userId;
+      const container = document.getElementById('evaluations-content');
+      container.innerHTML = '<div class="loader">Chargement…</div>';
+      try {
+        const { evaluations } = await api(`/administratif/evaluations/${userId}`);
+        container.innerHTML = `
+          <button class="btn btn-secondary btn-sm" id="new-eval-btn" style="margin:12px 0">+ Nouvelle évaluation</button>
+          ${evaluations.length === 0 ? '<div class="empty-state">Aucune évaluation enregistrée.</div>' : evaluations.map(ev => `
+            <div class="card" style="margin-bottom:10px">
+              <div class="flex-between">
+                <span class="badge badge-warn">Note ${ev.note}/5</span>
+                <div class="flex gap-8">
+                  <span class="muted" style="font-size:0.78rem">${formatDate(ev.date_evaluation)} · ${escapeHtml(ev.evaluateur_username || '—')}</span>
+                  <button class="btn btn-danger btn-sm" data-del-eval="${ev.id}">✕</button>
+                </div>
+              </div>
+              ${ev.commentaire ? `<p class="mb-0" style="font-size:0.86rem; margin-top:6px">${escapeHtml(ev.commentaire)}</p>` : ''}
+            </div>
+          `).join('')}
+        `;
+        document.getElementById('new-eval-btn').addEventListener('click', () => {
+          document.getElementById('eval-form').reset();
+          document.getElementById('ev-note').value = 3;
+          document.getElementById('eval-modal').classList.add('open');
+        });
+        container.querySelectorAll('[data-del-eval]').forEach(btn => btn.addEventListener('click', async () => {
+          try { await api(`/administratif/evaluations/${btn.dataset.delEval}`, { method: 'DELETE' }); loadEvaluations(currentEvalUserId); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    async function saveEvaluation(e) {
+      e.preventDefault();
+      try {
+        await api('/administratif/evaluations', {
+          method: 'POST',
+          body: { user_id: currentEvalUserId, note: parseInt(document.getElementById('ev-note').value), commentaire: document.getElementById('ev-commentaire').value.trim() },
+        });
+        toast('Évaluation enregistrée.');
+        document.getElementById('eval-modal').classList.remove('open');
+        loadEvaluations(currentEvalUserId);
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Statistiques des comptes ---
+    async function loadStatsComptes() {
+      try {
+        const { totaux, parGrade, parPole, liste } = await api('/administratif/stats-comptes');
+        const approuve = totaux.find(t => t.statut === 'approuve');
+        const enAttente = totaux.find(t => t.statut === 'en_attente');
+        document.getElementById('comptes-totaux').innerHTML = `
+          <div class="stat-box"><span class="n">${approuve ? approuve.n : 0}</span><span class="l">Comptes approuvés</span></div>
+          <div class="stat-box"><span class="n">${enAttente ? enAttente.n : 0}</span><span class="l">En attente</span></div>
+          <div class="stat-box"><span class="n">${liste.length}</span><span class="l">Total</span></div>
+        `;
+        const barHtml = (data) => {
+          const max = Math.max(...data.map(d => d.n), 1);
+          return data.map(d => `
+            <div class="bar-row">
+              <span class="bar-label">${escapeHtml(d.grade || d.pole)}</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.round((d.n / max) * 100)}%"></div></div>
+              <span class="bar-value">${d.n}</span>
+            </div>
+          `).join('');
+        };
+        document.getElementById('comptes-par-grade').innerHTML = parGrade.length ? barHtml(parGrade) : '<p class="muted mb-0">Aucune donnée.</p>';
+        document.getElementById('comptes-par-pole').innerHTML = parPole.length ? barHtml(parPole) : '<p class="muted mb-0">Aucune donnée.</p>';
+
+        document.getElementById('comptes-liste').innerHTML = liste.map(u => `
+          <tr>
+            <td>${escapeHtml(u.username)}</td>
+            <td>${escapeHtml(u.grade_nom || '—')}</td>
+            <td>${(u.poles || []).join(', ') || '—'}</td>
+            <td style="font-size:0.8rem">${u.last_login ? formatDateTime(u.last_login) : 'Jamais connecté'}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        document.getElementById('comptes-totaux').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
 
     async function loadRapport() {
       const container = document.getElementById('rapport-content');

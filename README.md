@@ -42,11 +42,24 @@ lourd) pour rester très léger en consommation de données et en ressources ser
   à plusieurs pôles à la fois, assignables depuis `/admin-comptes.html`. **DEV appartient
   automatiquement aux trois**, resynchronisé à chaque démarrage.
   - **Administratif** (`/administratif.html`) : rapport des amendes perçues par agent sur une
-    période donnée, et gestion des formations (avec formateur et participants).
+    période donnée, gestion des formations (avec formateur et participants), demandes de congé
+    (tout membre peut en faire une, le pôle les traite), évaluations périodiques par agent, et
+    statistiques des comptes en lecture seule (totaux, répartition par grade/pôle, dernière
+    connexion).
   - **Enquête** (`/enquetes.html`) : dossiers d'enquête reliant plusieurs casiers et plaintes
-    entre eux, avec suivi de statut (ouverte / en cours / clôturée).
-  - **Sécurité** (`/securite.html`) : journal des incidents de sécurité, en complément du
-    planning des patrouilles déjà existant.
+    entre eux, avec suivi de statut (ouverte / en cours / clôturée), chronologie d'événements
+    horodatés, et pièces à conviction (nom, description, localisation).
+  - **Sécurité** (`/securite.html`) : journal des incidents de sécurité, registre des entrées et
+    sorties du village, suivi des escortes diplomatiques (destination, personnalité, agents
+    assignés), et niveaux de sécurité par zone — en complément du planning des patrouilles.
+- **Casiers enrichis** : mandats d'arrêt formels (arrestation/perquisition/comparution, actif ou
+  levé), galerie de photos, export CSV de l'ensemble des casiers.
+- **Annuaire des habitants** (`/habitants.html`) : contexte RP pour les personnes non fichées
+  judiciairement.
+- **Annonces internes** : fil réservé aux membres connectés sur le tableau de bord, distinct des
+  communiqués publics de l'accueil.
+- **Historique de connexion** : date de dernière connexion visible sur chaque compte dans
+  `/admin-comptes.html`.
 - **Journal d'activité** : historique des actions administratives (validations de compte,
   changements de grade/rang, modifications du code pénal, casiers créés/supprimés, blâmes
   appliqués, activation d'un code d'alerte…), consultable sur `/journal.html`.

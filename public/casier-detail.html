@@ -312,9 +312,10 @@
     async function loadDetail() {
       const container = document.getElementById('casier-content');
       try {
-        const { casier, infractions } = await api(`/casiers/${casierId}`);
+        const { casier, infractions, mandats, photos } = await api(`/casiers/${casierId}`);
         const [label, cls] = statutLabels[casier.statut] || ['Inconnu', 'badge-muted'];
         const canManage = user.permissions.peut_gerer_casiers;
+        const mandatsActifs = (mandats || []).filter(m => m.actif);
 
         container.innerHTML = `
           <div class="card" style="margin-bottom:24px">
@@ -322,6 +323,7 @@
               <div>
                 <span class="badge ${cls}">${label}</span>
                 <span class="badge badge-danger">Danger ${casier.niveau_danger}/5</span>
+                ${mandatsActifs.length ? `<span class="badge badge-danger">⚠ ${mandatsActifs.length} mandat(s) actif(s)</span>` : ''}
                 <h1 style="margin-top:10px">${escapeHtml(casier.nom)} ${escapeHtml(casier.prenom || '')}</h1>
                 ${casier.surnom ? `<p class="muted mb-0">dit "${escapeHtml(casier.surnom)}"</p>` : ''}
               </div>
@@ -338,6 +340,45 @@
             </div>
             ${casier.description ? `<p style="margin-top:16px">${escapeHtml(casier.description)}</p>` : ''}
           </div>
+
+          <section style="padding:0 0 24px">
+            <div class="section-head">
+              <h2 class="mb-0" style="font-size:1.1rem">Mandats</h2>
+              ${canManage ? '<button class="btn btn-secondary btn-sm" id="add-mandat-btn">+ Émettre un mandat</button>' : ''}
+            </div>
+            <div id="mandats-list">
+              ${(mandats || []).length === 0 ? '<div class="empty-state">Aucun mandat émis.</div>' : mandats.map(m => `
+                <div class="flex-between" style="padding:8px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                  <div>
+                    <span class="badge ${m.actif ? 'badge-danger' : 'badge-muted'}">${m.actif ? 'Actif' : 'Levé'}</span>
+                    <strong style="margin-left:6px">${escapeHtml(m.type)}</strong>
+                    <span class="muted" style="font-size:0.8rem"> · ${formatDate(m.date_emission)} · ${escapeHtml(m.emis_par_username || '—')}</span>
+                    ${m.motif ? `<p class="mb-0" style="font-size:0.84rem">${escapeHtml(m.motif)}</p>` : ''}
+                  </div>
+                  ${canManage ? `<div class="flex gap-8">
+                    <button class="btn btn-secondary btn-sm" data-toggle-mandat="${m.id}" data-actif="${m.actif}">${m.actif ? 'Lever' : 'Réactiver'}</button>
+                    <button class="btn btn-danger btn-sm" data-del-mandat="${m.id}">✕</button>
+                  </div>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </section>
+
+          <section style="padding:0 0 24px">
+            <div class="section-head">
+              <h2 class="mb-0" style="font-size:1.1rem">Photos</h2>
+              ${canManage ? '<button class="btn btn-secondary btn-sm" id="add-photo-btn">+ Ajouter une photo</button>' : ''}
+            </div>
+            <div id="photos-list" class="grid grid-3">
+              ${(photos || []).length === 0 ? '<div class="empty-state">Aucune photo.</div>' : photos.map(p => `
+                <div class="card" style="padding:10px">
+                  <img src="${escapeHtml(p.url)}" alt="${escapeHtml(p.legende || 'Photo')}" style="width:100%; border-radius:4px; display:block; margin-bottom:6px" onerror="this.style.display='none'" />
+                  ${p.legende ? `<p class="mb-0" style="font-size:0.8rem">${escapeHtml(p.legende)}</p>` : ''}
+                  ${canManage ? `<button class="btn btn-danger btn-sm" data-del-photo="${p.id}" style="margin-top:6px">Supprimer</button>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </section>
 
           <div class="section-head">
             <h2 class="mb-0" style="font-size:1.2rem">Infractions (${infractions.length})</h2>
@@ -368,10 +409,56 @@
           document.querySelectorAll('[data-del-groupe]').forEach(btn => {
             btn.addEventListener('click', () => deleteGroupe(btn.dataset.delGroupe));
           });
+
+          document.getElementById('add-mandat-btn').addEventListener('click', addMandat);
+          document.querySelectorAll('[data-toggle-mandat]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              try { await api(`/casiers/mandats/${btn.dataset.toggleMandat}`, { method: 'PATCH', body: { actif: btn.dataset.actif !== 'true' } }); loadDetail(); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
+          document.querySelectorAll('[data-del-mandat]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer ce mandat ?')) return;
+              try { await api(`/casiers/mandats/${btn.dataset.delMandat}`, { method: 'DELETE' }); loadDetail(); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
+
+          document.getElementById('add-photo-btn').addEventListener('click', addPhoto);
+          document.querySelectorAll('[data-del-photo]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (!confirm('Supprimer cette photo ?')) return;
+              try { await api(`/casiers/photos/${btn.dataset.delPhoto}`, { method: 'DELETE' }); loadDetail(); }
+              catch (err) { toast(err.message, 'error'); }
+            });
+          });
         }
       } catch (err) {
         container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       }
+    }
+
+    async function addMandat() {
+      const type = prompt('Type de mandat (arrestation / perquisition / comparution) :', 'arrestation');
+      if (!type) return;
+      const motif = prompt('Motif :') || '';
+      try {
+        await api(`/casiers/${casierId}/mandats`, { method: 'POST', body: { type, motif } });
+        toast('Mandat émis.');
+        loadDetail();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function addPhoto() {
+      const url = prompt('URL de la photo :');
+      if (!url) return;
+      const legende = prompt('Légende (optionnel) :') || '';
+      try {
+        await api(`/casiers/${casierId}/photos`, { method: 'POST', body: { url, legende } });
+        toast('Photo ajoutée.');
+        loadDetail();
+      } catch (err) { toast(err.message, 'error'); }
     }
 
     async function addInfraction(e) {

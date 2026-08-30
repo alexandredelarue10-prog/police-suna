@@ -30,14 +30,14 @@
 
     async function loadDetail() {
       try {
-        const { enquete, casiers, plaintes } = await api(`/enquetes/${enqueteId}`);
-        render(enquete, casiers, plaintes);
+        const { enquete, casiers, plaintes, evenements, pieces } = await api(`/enquetes/${enqueteId}`);
+        render(enquete, casiers, plaintes, evenements, pieces);
       } catch (err) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       }
     }
 
-    function render(enquete, casiers, plaintes) {
+    function render(enquete, casiers, plaintes, evenements, pieces) {
       document.getElementById('content').innerHTML = `
         <div class="card dark-form">
           <h1 style="margin-top:0">${escapeHtml(enquete.numero)}</h1>
@@ -88,6 +88,44 @@
             `).join('')}
           </div>
         </section>
+
+        <section style="padding:12px 0">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Chronologie</h2>
+            <button class="btn btn-secondary btn-sm" id="add-evenement-btn">+ Ajouter un événement</button>
+          </div>
+          <div id="evenements-list">
+            ${evenements.length === 0 ? '<div class="empty-state">Aucun événement enregistré.</div>' : evenements.map(ev => `
+              <div class="flex-between" style="padding:10px 0; border-bottom:1px solid rgba(217,192,139,0.12); align-items:flex-start">
+                <div>
+                  <strong style="font-size:0.85rem">${ev.date_evenement ? formatDate(ev.date_evenement) : 'Date non précisée'}</strong>
+                  <p class="mb-0" style="font-size:0.86rem; margin-top:2px">${escapeHtml(ev.description)}</p>
+                  <p class="muted mb-0" style="font-size:0.74rem">${escapeHtml(ev.cree_par_username || '—')}</p>
+                </div>
+                <button class="btn btn-danger btn-sm" data-del-evenement="${ev.id}">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <section style="padding:12px 0">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Pièces à conviction</h2>
+            <button class="btn btn-secondary btn-sm" id="add-piece-btn">+ Ajouter une pièce</button>
+          </div>
+          <div id="pieces-list" class="grid grid-3">
+            ${pieces.length === 0 ? '<div class="empty-state">Aucune pièce enregistrée.</div>' : pieces.map(p => `
+              <div class="card">
+                <div class="flex-between" style="align-items:flex-start">
+                  <strong style="font-size:0.9rem">${escapeHtml(p.nom)}</strong>
+                  <button class="btn btn-danger btn-sm" data-del-piece="${p.id}">✕</button>
+                </div>
+                ${p.localisation ? `<p class="muted mb-0" style="font-size:0.78rem">📍 ${escapeHtml(p.localisation)}</p>` : ''}
+                ${p.description ? `<p class="mb-0" style="font-size:0.84rem; margin-top:4px">${escapeHtml(p.description)}</p>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </section>
       `;
 
       document.getElementById('e-form').addEventListener('submit', saveEnquete);
@@ -106,6 +144,43 @@
           catch (err) { toast(err.message, 'error'); }
         });
       });
+      document.getElementById('add-evenement-btn').addEventListener('click', addEvenement);
+      document.getElementById('add-piece-btn').addEventListener('click', addPiece);
+      document.querySelectorAll('[data-del-evenement]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/enquetes/evenements/${btn.dataset.delEvenement}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      document.querySelectorAll('[data-del-piece]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/enquetes/pieces/${btn.dataset.delPiece}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+
+    async function addEvenement() {
+      const description = prompt('Description de l\'événement :');
+      if (!description || !description.trim()) return;
+      const date_evenement = prompt('Date (AAAA-MM-JJ, optionnel) :', new Date().toISOString().slice(0, 10));
+      try {
+        await api(`/enquetes/${enqueteId}/evenements`, { method: 'POST', body: { description: description.trim(), date_evenement: date_evenement || null } });
+        toast('Événement ajouté.');
+        loadDetail();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function addPiece() {
+      const nom = prompt('Nom de la pièce à conviction :');
+      if (!nom || !nom.trim()) return;
+      const localisation = prompt('Localisation (optionnel) :') || '';
+      const description = prompt('Description (optionnel) :') || '';
+      try {
+        await api(`/enquetes/${enqueteId}/pieces`, { method: 'POST', body: { nom: nom.trim(), localisation, description } });
+        toast('Pièce ajoutée.');
+        loadDetail();
+      } catch (err) { toast(err.message, 'error'); }
     }
 
     async function saveEnquete(e) {

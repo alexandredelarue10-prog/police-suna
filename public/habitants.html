@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annuaire — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Annuaire des habitants</h1>
+          <p class="muted">Registre des habitants du village, à titre de contexte (non fichés judiciairement).</p>
+        </div>
+        <button class="btn btn-primary" id="new-btn">+ Ajouter un habitant</button>
+      </div>
+      <div class="field" style="max-width:320px; margin-bottom:20px">
+        <input type="text" id="search-input" placeholder="Rechercher un nom…" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28)" />
+      </div>
+      <div id="habitants-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="habitant-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouvel habitant</h3>
+      <form id="habitant-form">
+        <input type="hidden" id="h-id" />
+        <div class="field-row">
+          <div class="field"><label for="h-nom">Nom *</label><input type="text" id="h-nom" required /></div>
+          <div class="field"><label for="h-prenom">Prénom</label><input type="text" id="h-prenom" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="h-village">Village</label><input type="text" id="h-village" placeholder="Ex : Sunagakure" /></div>
+          <div class="field"><label for="h-profession">Profession</label><input type="text" id="h-profession" /></div>
+        </div>
+        <div class="field"><label for="h-description">Description</label><textarea id="h-description" rows="3"></textarea></div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let habitantsCache = [];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'habitants', requireAuth: true });
+      if (!user) return;
+      document.getElementById('new-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('habitant-modal').classList.remove('open'));
+      document.getElementById('habitant-form').addEventListener('submit', saveHabitant);
+      let timer;
+      document.getElementById('search-input').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(loadHabitants, 250); });
+      loadHabitants();
+    })();
+
+    async function loadHabitants() {
+      const grid = document.getElementById('habitants-grid');
+      const q = document.getElementById('search-input').value;
+      try {
+        const { habitants } = await api('/interne/habitants' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+        habitantsCache = habitants;
+        if (habitants.length === 0) { grid.innerHTML = '<div class="empty-state">Aucun habitant enregistré.</div>'; return; }
+        grid.innerHTML = habitants.map(h => `
+          <div class="card">
+            <div class="flex-between" style="align-items:flex-start">
+              <div>
+                <strong>${escapeHtml(h.nom)} ${escapeHtml(h.prenom || '')}</strong>
+                ${h.profession ? `<p class="muted mb-0" style="font-size:0.82rem">${escapeHtml(h.profession)}</p>` : ''}
+                ${h.village ? `<p class="muted mb-0" style="font-size:0.78rem">${escapeHtml(h.village)}</p>` : ''}
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${h.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${h.id}">✕</button>
+              </div>
+            </div>
+            ${h.description ? `<p style="font-size:0.85rem; margin-top:8px">${escapeHtml(h.description)}</p>` : ''}
+          </div>
+        `).join('');
+        grid.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openModal(habitantsCache.find(h => h.id == btn.dataset.edit))));
+        grid.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+          if (!confirm('Supprimer cet habitant ?')) return;
+          try { await api(`/interne/habitants/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Habitant supprimé.'); loadHabitants(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    function openModal(habitant = null) {
+      document.getElementById('habitant-form').reset();
+      if (habitant) {
+        document.getElementById('modal-title').textContent = "Modifier l'habitant";
+        document.getElementById('h-id').value = habitant.id;
+        document.getElementById('h-nom').value = habitant.nom;
+        document.getElementById('h-prenom').value = habitant.prenom || '';
+        document.getElementById('h-village').value = habitant.village || '';
+        document.getElementById('h-profession').value = habitant.profession || '';
+        document.getElementById('h-description').value = habitant.description || '';
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouvel habitant';
+        document.getElementById('h-id').value = '';
+      }
+      document.getElementById('habitant-modal').classList.add('open');
+    }
+
+    async function saveHabitant(e) {
+      e.preventDefault();
+      const id = document.getElementById('h-id').value;
+      const payload = {
+        nom: document.getElementById('h-nom').value.trim(),
+        prenom: document.getElementById('h-prenom').value.trim(),
+        village: document.getElementById('h-village').value.trim(),
+        profession: document.getElementById('h-profession').value.trim(),
+        description: document.getElementById('h-description').value.trim(),
+      };
+      try {
+        if (id) await api(`/interne/habitants/${id}`, { method: 'PUT', body: payload });
+        else await api('/interne/habitants', { method: 'POST', body: payload });
+        toast('Habitant enregistré.');
+        document.getElementById('habitant-modal').classList.remove('open');
+        loadHabitants();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+  </script>
+</body>
+</html>

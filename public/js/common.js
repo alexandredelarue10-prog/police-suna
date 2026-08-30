@@ -37,6 +37,7 @@ function buildNavbar(activeKey) {
       linkHtml('plaintes.html', 'Dépôts de plainte', 'plaintes'),
       linkHtml('planning.html', 'Planning', 'planning'),
       linkHtml('statistiques.html', 'Statistiques', 'statistiques'),
+      linkHtml('habitants.html', 'Annuaire', 'habitants'),
       linkHtml('profil.html', 'Mon profil', 'profil'),
     ].join('');
   }

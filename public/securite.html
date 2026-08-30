@@ -9,47 +9,122 @@
 <body>
   <div class="page-body">
     <div class="wrap" style="padding-top:40px">
-      <div class="section-head">
-        <div>
-          <h1 class="mb-0">Pôle Sécurité</h1>
-          <p class="muted" style="max-width:600px">Protection du village et maintien de l'ordre : organisation des patrouilles, surveillance des entrées et sorties, escortes diplomatiques.</p>
-        </div>
-        <button class="btn btn-primary" id="new-btn">+ Signaler un incident</button>
-      </div>
+      <h1>Pôle Sécurité</h1>
+      <p class="muted" style="max-width:600px; margin-bottom:20px">Protection du village et maintien de l'ordre : patrouilles, surveillance des entrées et sorties, escortes diplomatiques.</p>
       <p style="margin-bottom:20px"><a href="planning.html">→ Voir le planning des patrouilles</a></p>
-      <div id="incidents-list"><div class="loader">Chargement…</div></div>
+
+      <div class="flex gap-8" style="margin-bottom:24px; flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="tab-incidents-btn">Incidents</button>
+        <button class="btn btn-secondary btn-sm" id="tab-mouvements-btn">Entrées / Sorties</button>
+        <button class="btn btn-secondary btn-sm" id="tab-escortes-btn">Escortes</button>
+        <button class="btn btn-secondary btn-sm" id="tab-zones-btn">Zones</button>
+      </div>
+
+      <div id="tab-incidents">
+        <div class="section-head"><h2 class="mb-0" style="font-size:1.05rem">Incidents</h2><button class="btn btn-primary btn-sm" id="new-incident-btn">+ Signaler</button></div>
+        <div id="incidents-list"><div class="loader">Chargement…</div></div>
+      </div>
+
+      <div id="tab-mouvements" class="hidden">
+        <div class="section-head"><h2 class="mb-0" style="font-size:1.05rem">Registre des entrées / sorties</h2><button class="btn btn-primary btn-sm" id="new-mouvement-btn">+ Enregistrer</button></div>
+        <div id="mouvements-list"><div class="loader">Chargement…</div></div>
+      </div>
+
+      <div id="tab-escortes" class="hidden">
+        <div class="section-head"><h2 class="mb-0" style="font-size:1.05rem">Escortes diplomatiques</h2><button class="btn btn-primary btn-sm" id="new-escorte-btn">+ Planifier</button></div>
+        <div id="escortes-list"><div class="loader">Chargement…</div></div>
+      </div>
+
+      <div id="tab-zones" class="hidden">
+        <div class="section-head"><h2 class="mb-0" style="font-size:1.05rem">Niveau de sécurité par zone</h2><button class="btn btn-primary btn-sm" id="new-zone-btn">+ Ajouter une zone</button></div>
+        <div id="zones-list"><div class="loader">Chargement…</div></div>
+      </div>
     </div>
   </div>
 
+  <!-- Modale incident -->
   <div class="modal-backdrop" id="incident-modal">
     <div class="modal">
-      <h3 id="modal-title">Signaler un incident</h3>
+      <h3 id="incident-modal-title">Signaler un incident</h3>
       <form id="incident-form">
         <input type="hidden" id="i-id" />
-        <div class="field">
-          <label for="i-titre">Titre *</label>
-          <input type="text" id="i-titre" required />
-        </div>
-        <div class="field">
-          <label for="i-description">Description</label>
-          <textarea id="i-description" rows="3"></textarea>
-        </div>
+        <div class="field"><label for="i-titre">Titre *</label><input type="text" id="i-titre" required /></div>
+        <div class="field"><label for="i-description">Description</label><textarea id="i-description" rows="3"></textarea></div>
         <div class="field-row">
-          <div class="field">
-            <label for="i-lieu">Lieu</label>
-            <input type="text" id="i-lieu" />
-          </div>
-          <div class="field">
-            <label for="i-date">Date</label>
-            <input type="date" id="i-date" />
-          </div>
-          <div class="field">
-            <label for="i-gravite">Gravité (1-5)</label>
-            <input type="number" id="i-gravite" min="1" max="5" value="1" />
-          </div>
+          <div class="field"><label for="i-lieu">Lieu</label><input type="text" id="i-lieu" /></div>
+          <div class="field"><label for="i-date">Date</label><input type="date" id="i-date" /></div>
+          <div class="field"><label for="i-gravite">Gravité (1-5)</label><input type="number" id="i-gravite" min="1" max="5" value="1" /></div>
         </div>
         <div class="modal-close-row">
-          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="button" class="btn btn-secondary" id="incident-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale mouvement -->
+  <div class="modal-backdrop" id="mouvement-modal">
+    <div class="modal">
+      <h3>Enregistrer un passage</h3>
+      <form id="mouvement-form">
+        <div class="field"><label for="m-nom">Nom de la personne *</label><input type="text" id="m-nom" required /></div>
+        <div class="field-row">
+          <div class="field"><label for="m-type">Type</label><select id="m-type"><option value="entree">Entrée</option><option value="sortie">Sortie</option></select></div>
+          <div class="field"><label for="m-motif">Motif</label><input type="text" id="m-motif" /></div>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="mouvement-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale escorte -->
+  <div class="modal-backdrop" id="escorte-modal">
+    <div class="modal">
+      <h3 id="escorte-modal-title">Planifier une escorte</h3>
+      <form id="escorte-form">
+        <input type="hidden" id="es-id" />
+        <div class="field"><label for="es-titre">Titre *</label><input type="text" id="es-titre" required /></div>
+        <div class="field-row">
+          <div class="field"><label for="es-destination">Destination</label><input type="text" id="es-destination" /></div>
+          <div class="field"><label for="es-personnalite">Personnalité escortée</label><input type="text" id="es-personnalite" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="es-debut">Date début</label><input type="date" id="es-debut" /></div>
+          <div class="field"><label for="es-fin">Date fin</label><input type="date" id="es-fin" /></div>
+          <div class="field"><label for="es-statut">Statut</label>
+            <select id="es-statut">
+              <option value="planifiee">Planifiée</option>
+              <option value="en_cours">En cours</option>
+              <option value="terminee">Terminée</option>
+              <option value="annulee">Annulée</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Agents assignés</label><div id="es-agents" style="max-height:150px; overflow-y:auto; border:1px solid rgba(23,21,15,0.15); border-radius:4px; padding:8px"></div></div>
+        <div class="field"><label for="es-notes">Notes</label><textarea id="es-notes" rows="2"></textarea></div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="escorte-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale zone -->
+  <div class="modal-backdrop" id="zone-modal">
+    <div class="modal">
+      <h3 id="zone-modal-title">Nouvelle zone</h3>
+      <form id="zone-form">
+        <input type="hidden" id="z-id" />
+        <div class="field"><label for="z-nom">Nom de la zone *</label><input type="text" id="z-nom" required /></div>
+        <div class="field"><label for="z-niveau">Niveau de sécurité (1-5)</label><input type="number" id="z-niveau" min="1" max="5" value="1" /></div>
+        <div class="field"><label for="z-description">Description</label><textarea id="z-description" rows="2"></textarea></div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="zone-cancel">Annuler</button>
           <button type="submit" class="btn btn-primary">Enregistrer</button>
         </div>
       </form>
@@ -59,65 +134,88 @@
   <script src="js/api.js"></script>
   <script src="js/common.js"></script>
   <script>
-    let incidentsCache = [];
+    let incidentsCache = [], escortesCache = [], zonesCache = [], usersCache = [];
 
     (async function () {
       const user = await initLayout({ activeKey: 'securite', requireAuth: true });
       if (!user || !user.poles.includes('Sécurité')) { window.location.href = 'dashboard.html'; return; }
-      document.getElementById('new-btn').addEventListener('click', () => openModal());
-      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('incident-modal').classList.remove('open'));
+
+      try {
+        const { users } = await api('/users');
+        usersCache = users.filter(u => u.statut === 'approuve');
+        document.getElementById('es-agents').innerHTML = usersCache.map(u => `
+          <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-weight:400; font-size:0.85rem; padding:3px 0">
+            <input type="checkbox" class="es-agent-check" value="${u.id}" style="width:auto" /> ${escapeHtml(u.nom_complet || u.username)}
+          </label>
+        `).join('');
+      } catch (_) { /* silencieux */ }
+
+      [['incidents', loadIncidents], ['mouvements', loadMouvements], ['escortes', loadEscortes], ['zones', loadZones]].forEach(([key, loader]) => {
+        document.getElementById(`tab-${key}-btn`).addEventListener('click', () => switchTab(key, loader));
+      });
+
+      document.getElementById('new-incident-btn').addEventListener('click', () => openIncidentModal());
+      document.getElementById('incident-cancel').addEventListener('click', () => document.getElementById('incident-modal').classList.remove('open'));
       document.getElementById('incident-form').addEventListener('submit', saveIncident);
+
+      document.getElementById('new-mouvement-btn').addEventListener('click', () => { document.getElementById('mouvement-form').reset(); document.getElementById('mouvement-modal').classList.add('open'); });
+      document.getElementById('mouvement-cancel').addEventListener('click', () => document.getElementById('mouvement-modal').classList.remove('open'));
+      document.getElementById('mouvement-form').addEventListener('submit', saveMouvement);
+
+      document.getElementById('new-escorte-btn').addEventListener('click', () => openEscorteModal());
+      document.getElementById('escorte-cancel').addEventListener('click', () => document.getElementById('escorte-modal').classList.remove('open'));
+      document.getElementById('escorte-form').addEventListener('submit', saveEscorte);
+
+      document.getElementById('new-zone-btn').addEventListener('click', () => openZoneModal());
+      document.getElementById('zone-cancel').addEventListener('click', () => document.getElementById('zone-modal').classList.remove('open'));
+      document.getElementById('zone-form').addEventListener('submit', saveZone);
+
       loadIncidents();
     })();
 
+    function switchTab(active, loader) {
+      ['incidents', 'mouvements', 'escortes', 'zones'].forEach(key => {
+        document.getElementById(`tab-${key}`).classList.toggle('hidden', key !== active);
+        document.getElementById(`tab-${key}-btn`).className = key === active ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+      });
+      loader();
+    }
+
+    const statutBadge = { planifiee: 'badge-warn', en_cours: 'badge-danger', terminee: 'badge-ok', annulee: 'badge-muted' };
+
+    // --- Incidents ---
     async function loadIncidents() {
       const container = document.getElementById('incidents-list');
       try {
         const { incidents } = await api('/securite/incidents');
         incidentsCache = incidents;
-        if (incidents.length === 0) {
-          container.innerHTML = '<div class="empty-state">Aucun incident signalé.</div>';
-          return;
-        }
+        if (incidents.length === 0) { container.innerHTML = '<div class="empty-state">Aucun incident signalé.</div>'; return; }
         container.innerHTML = incidents.map(i => `
           <div class="card" style="margin-bottom:12px; border-left:4px solid var(--sceau-600)">
             <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:10px">
               <div>
                 <span class="badge badge-danger" style="opacity:${i.niveau_gravite / 5}">Gravité ${i.niveau_gravite}/5</span>
                 <h3 style="font-size:1rem; margin:6px 0 2px">${escapeHtml(i.titre)}</h3>
-                <p class="muted mb-0" style="font-size:0.8rem">
-                  ${i.date_incident ? formatDate(i.date_incident) : 'Date non précisée'}${i.lieu ? ' · ' + escapeHtml(i.lieu) : ''} · Signalé par ${escapeHtml(i.agent_username || '—')}
-                </p>
+                <p class="muted mb-0" style="font-size:0.8rem">${i.date_incident ? formatDate(i.date_incident) : 'Date non précisée'}${i.lieu ? ' · ' + escapeHtml(i.lieu) : ''} · ${escapeHtml(i.agent_username || '—')}</p>
               </div>
-              <div class="flex gap-8">
-                <button class="btn btn-secondary btn-sm" data-edit="${i.id}">Modifier</button>
-                <button class="btn btn-danger btn-sm" data-delete="${i.id}">Suppr.</button>
-              </div>
+              <div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-edit="${i.id}">Modifier</button><button class="btn btn-danger btn-sm" data-delete="${i.id}">Suppr.</button></div>
             </div>
             ${i.description ? `<p style="font-size:0.86rem; margin-top:8px">${escapeHtml(i.description)}</p>` : ''}
           </div>
         `).join('');
-
-        container.querySelectorAll('[data-edit]').forEach(btn => {
-          btn.addEventListener('click', () => openModal(incidentsCache.find(i => i.id == btn.dataset.edit)));
-        });
-        container.querySelectorAll('[data-delete]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            if (!confirm('Supprimer cet incident ?')) return;
-            try { await api(`/securite/incidents/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Incident supprimé.'); loadIncidents(); }
-            catch (err) { toast(err.message, 'error'); }
-          });
-        });
-      } catch (err) {
-        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
-      }
+        container.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openIncidentModal(incidentsCache.find(i => i.id == btn.dataset.edit))));
+        container.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+          if (!confirm('Supprimer cet incident ?')) return;
+          try { await api(`/securite/incidents/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Incident supprimé.'); loadIncidents(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
     }
 
-    function openModal(incident = null) {
+    function openIncidentModal(incident = null) {
       document.getElementById('incident-form').reset();
       document.getElementById('i-gravite').value = 1;
       if (incident) {
-        document.getElementById('modal-title').textContent = 'Modifier l\'incident';
+        document.getElementById('incident-modal-title').textContent = 'Modifier l\'incident';
         document.getElementById('i-id').value = incident.id;
         document.getElementById('i-titre').value = incident.titre;
         document.getElementById('i-description').value = incident.description || '';
@@ -125,7 +223,7 @@
         document.getElementById('i-date').value = incident.date_incident ? String(incident.date_incident).slice(0, 10) : '';
         document.getElementById('i-gravite').value = incident.niveau_gravite;
       } else {
-        document.getElementById('modal-title').textContent = 'Signaler un incident';
+        document.getElementById('incident-modal-title').textContent = 'Signaler un incident';
         document.getElementById('i-id').value = '';
       }
       document.getElementById('incident-modal').classList.add('open');
@@ -147,9 +245,179 @@
         toast('Incident enregistré.');
         document.getElementById('incident-modal').classList.remove('open');
         loadIncidents();
-      } catch (err) {
-        toast(err.message, 'error');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Entrées / sorties ---
+    async function loadMouvements() {
+      const container = document.getElementById('mouvements-list');
+      try {
+        const { mouvements } = await api('/securite/entrees-sorties');
+        if (mouvements.length === 0) { container.innerHTML = '<div class="empty-state">Aucun mouvement enregistré.</div>'; return; }
+        container.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Personne</th><th>Type</th><th>Motif</th><th>Date</th><th></th></tr></thead><tbody>
+          ${mouvements.map(m => `
+            <tr>
+              <td>${escapeHtml(m.nom_personne)}</td>
+              <td><span class="badge ${m.type === 'entree' ? 'badge-ok' : 'badge-warn'}">${m.type === 'entree' ? 'Entrée' : 'Sortie'}</span></td>
+              <td>${escapeHtml(m.motif || '—')}</td>
+              <td style="font-size:0.8rem">${formatDateTime(m.date_passage)}</td>
+              <td><button class="btn btn-danger btn-sm" data-del-mvt="${m.id}">Suppr.</button></td>
+            </tr>
+          `).join('')}
+        </tbody></table></div>`;
+        container.querySelectorAll('[data-del-mvt]').forEach(btn => btn.addEventListener('click', async () => {
+          try { await api(`/securite/entrees-sorties/${btn.dataset.delMvt}`, { method: 'DELETE' }); loadMouvements(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    async function saveMouvement(e) {
+      e.preventDefault();
+      try {
+        await api('/securite/entrees-sorties', {
+          method: 'POST',
+          body: { nom_personne: document.getElementById('m-nom').value.trim(), type: document.getElementById('m-type').value, motif: document.getElementById('m-motif').value.trim() },
+        });
+        toast('Passage enregistré.');
+        document.getElementById('mouvement-modal').classList.remove('open');
+        loadMouvements();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Escortes ---
+    async function loadEscortes() {
+      const container = document.getElementById('escortes-list');
+      try {
+        const { escortes } = await api('/securite/escortes');
+        escortesCache = escortes;
+        if (escortes.length === 0) { container.innerHTML = '<div class="empty-state">Aucune escorte planifiée.</div>'; return; }
+        container.innerHTML = escortes.map(es => `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="align-items:flex-start; flex-wrap:wrap; gap:10px">
+              <div>
+                <span class="badge ${statutBadge[es.statut] || 'badge-muted'}">${es.statut}</span>
+                <h3 style="font-size:1rem; margin:6px 0 2px">${escapeHtml(es.titre)}</h3>
+                <p class="muted mb-0" style="font-size:0.8rem">
+                  ${es.personnalite ? escapeHtml(es.personnalite) + ' → ' : ''}${escapeHtml(es.destination || '—')}
+                  ${es.date_debut ? ' · ' + formatDate(es.date_debut) : ''}
+                </p>
+                ${es.agents && es.agents.length ? `<p class="muted mb-0" style="font-size:0.78rem">Agents : ${es.agents.map(a => escapeHtml(a.nom)).join(', ')}</p>` : ''}
+              </div>
+              <div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-edit="${es.id}">Modifier</button><button class="btn btn-danger btn-sm" data-delete="${es.id}">Suppr.</button></div>
+            </div>
+          </div>
+        `).join('');
+        container.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openEscorteModal(escortesCache.find(es => es.id == btn.dataset.edit))));
+        container.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+          if (!confirm('Supprimer cette escorte ?')) return;
+          try { await api(`/securite/escortes/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Escorte supprimée.'); loadEscortes(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    function openEscorteModal(escorte = null) {
+      document.getElementById('escorte-form').reset();
+      document.querySelectorAll('.es-agent-check').forEach(c => { c.checked = false; });
+      if (escorte) {
+        document.getElementById('escorte-modal-title').textContent = 'Modifier l\'escorte';
+        document.getElementById('es-id').value = escorte.id;
+        document.getElementById('es-titre').value = escorte.titre;
+        document.getElementById('es-destination').value = escorte.destination || '';
+        document.getElementById('es-personnalite').value = escorte.personnalite || '';
+        document.getElementById('es-debut').value = escorte.date_debut ? String(escorte.date_debut).slice(0, 10) : '';
+        document.getElementById('es-fin').value = escorte.date_fin ? String(escorte.date_fin).slice(0, 10) : '';
+        document.getElementById('es-statut').value = escorte.statut;
+        document.getElementById('es-notes').value = escorte.notes || '';
+        const agentIds = (escorte.agents || []).map(a => a.id);
+        document.querySelectorAll('.es-agent-check').forEach(c => { c.checked = agentIds.includes(parseInt(c.value)); });
+      } else {
+        document.getElementById('escorte-modal-title').textContent = 'Planifier une escorte';
+        document.getElementById('es-id').value = '';
       }
+      document.getElementById('escorte-modal').classList.add('open');
+    }
+
+    async function saveEscorte(e) {
+      e.preventDefault();
+      const id = document.getElementById('es-id').value;
+      const agent_ids = [...document.querySelectorAll('.es-agent-check:checked')].map(c => parseInt(c.value));
+      const payload = {
+        titre: document.getElementById('es-titre').value.trim(),
+        destination: document.getElementById('es-destination').value.trim(),
+        personnalite: document.getElementById('es-personnalite').value.trim(),
+        date_debut: document.getElementById('es-debut').value || null,
+        date_fin: document.getElementById('es-fin').value || null,
+        statut: document.getElementById('es-statut').value,
+        notes: document.getElementById('es-notes').value.trim(),
+        agent_ids,
+      };
+      try {
+        if (id) await api(`/securite/escortes/${id}`, { method: 'PUT', body: payload });
+        else await api('/securite/escortes', { method: 'POST', body: payload });
+        toast('Escorte enregistrée.');
+        document.getElementById('escorte-modal').classList.remove('open');
+        loadEscortes();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // --- Zones ---
+    async function loadZones() {
+      const container = document.getElementById('zones-list');
+      try {
+        const { zones } = await api('/securite/zones');
+        zonesCache = zones;
+        if (zones.length === 0) { container.innerHTML = '<div class="empty-state">Aucune zone définie.</div>'; return; }
+        container.innerHTML = zones.map(z => `
+          <div class="card" style="margin-bottom:10px">
+            <div class="flex-between">
+              <div>
+                <span class="badge badge-danger" style="opacity:${z.niveau / 5}">Niveau ${z.niveau}/5</span>
+                <strong style="margin-left:8px">${escapeHtml(z.nom)}</strong>
+                ${z.description ? `<p class="muted mb-0" style="font-size:0.8rem; margin-top:4px">${escapeHtml(z.description)}</p>` : ''}
+              </div>
+              <div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-edit="${z.id}">Modifier</button><button class="btn btn-danger btn-sm" data-delete="${z.id}">Suppr.</button></div>
+            </div>
+          </div>
+        `).join('');
+        container.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openZoneModal(zonesCache.find(z => z.id == btn.dataset.edit))));
+        container.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+          if (!confirm('Supprimer cette zone ?')) return;
+          try { await api(`/securite/zones/${btn.dataset.delete}`, { method: 'DELETE' }); toast('Zone supprimée.'); loadZones(); } catch (err) { toast(err.message, 'error'); }
+        }));
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
+
+    function openZoneModal(zone = null) {
+      document.getElementById('zone-form').reset();
+      document.getElementById('z-niveau').value = 1;
+      if (zone) {
+        document.getElementById('zone-modal-title').textContent = 'Modifier la zone';
+        document.getElementById('z-id').value = zone.id;
+        document.getElementById('z-nom').value = zone.nom;
+        document.getElementById('z-niveau').value = zone.niveau;
+        document.getElementById('z-description').value = zone.description || '';
+      } else {
+        document.getElementById('zone-modal-title').textContent = 'Nouvelle zone';
+        document.getElementById('z-id').value = '';
+      }
+      document.getElementById('zone-modal').classList.add('open');
+    }
+
+    async function saveZone(e) {
+      e.preventDefault();
+      const id = document.getElementById('z-id').value;
+      const payload = {
+        nom: document.getElementById('z-nom').value.trim(),
+        niveau: parseInt(document.getElementById('z-niveau').value) || 1,
+        description: document.getElementById('z-description').value.trim(),
+      };
+      try {
+        if (id) await api(`/securite/zones/${id}`, { method: 'PUT', body: payload });
+        else await api('/securite/zones', { method: 'POST', body: payload });
+        toast('Zone enregistrée.');
+        document.getElementById('zone-modal').classList.remove('open');
+        loadZones();
+      } catch (err) { toast(err.message, 'error'); }
     }
   </script>
 </body>
