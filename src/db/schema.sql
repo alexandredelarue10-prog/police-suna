@@ -478,6 +478,30 @@ CREATE TABLE IF NOT EXISTS habitants (
 );
 CREATE INDEX IF NOT EXISTS idx_habitants_nom ON habitants(nom);
 
+-- PÔLE ADMINISTRATIF : pointage/présence des agents (une entrée par agent et par jour)
+CREATE TABLE IF NOT EXISTS presences (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date_presence DATE NOT NULL DEFAULT CURRENT_DATE,
+  present BOOLEAN NOT NULL DEFAULT TRUE,
+  notes VARCHAR(200) DEFAULT '',
+  enregistre_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, date_presence)
+);
+CREATE INDEX IF NOT EXISTS idx_presences_date ON presences(date_presence);
+
+-- MESSAGERIE INTERNE simple (boîte de réception / envoi entre membres)
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  expediteur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  destinataire_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contenu TEXT NOT NULL,
+  lu BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_destinataire ON messages(destinataire_id, lu);
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

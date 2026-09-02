@@ -29,6 +29,7 @@ const administratifRoutes = require('./src/routes/administratif.routes');
 const enquetesRoutes = require('./src/routes/enquetes.routes');
 const securiteRoutes = require('./src/routes/securite.routes');
 const interneRoutes = require('./src/routes/interne.routes');
+const messagesRoutes = require('./src/routes/messages.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -90,6 +91,7 @@ app.use('/api/administratif', administratifRoutes);
 app.use('/api/enquetes', enquetesRoutes);
 app.use('/api/securite', securiteRoutes);
 app.use('/api/interne', interneRoutes);
+app.use('/api/messages', messagesRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

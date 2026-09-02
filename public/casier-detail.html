@@ -91,7 +91,18 @@
   <script src="js/api.js"></script>
   <script src="js/common.js"></script>
   <script>
-    let user, casierId, sanctionsCache = [];
+    let user, casierId, sanctionsCache = [], currentInfractions = [], recidivesCache = [];
+
+    // Compte combien de fois cette sanction a déjà été appliquée sur ce casier et suggère
+    // automatiquement l'occurrence de récidive suivante (ex : 2 précédentes -> "3ème").
+    function suggestRecidive(sanctionId, selectEl) {
+      const nbPrecedentes = currentInfractions.filter(i => String(i.sanction_id) === String(sanctionId)).length;
+      if (nbPrecedentes === 0) { selectEl.value = ''; return; }
+      // recidivesCache est trié par "ordre" ; nbPrecedentes=1 -> 1ère occurrence de récidive (index 0), etc.
+      const sorted = [...recidivesCache].sort((a, b) => a.ordre - b.ordre);
+      const suggestion = sorted[Math.min(nbPrecedentes - 1, sorted.length - 1)];
+      if (suggestion) selectEl.value = suggestion.occurrence;
+    }
 
     (async function () {
       user = await initLayout({ activeKey: 'casiers', requireAuth: true });
@@ -136,6 +147,7 @@
               document.getElementById('i-description').value = s.description;
               document.getElementById('i-amende').value = s.amende ?? '';
               document.getElementById('i-cellule').value = s.cellule_tig;
+              suggestRecidive(s.id, document.getElementById('i-recidive'));
             }
           });
 
@@ -153,6 +165,7 @@
           }
 
           const { recidives } = await api('/recidives');
+          recidivesCache = recidives;
           [document.getElementById('i-recidive'), document.getElementById('multi-recidive')].forEach(recSelect => {
             recidives.forEach(r => {
               const opt = document.createElement('option');
@@ -188,6 +201,7 @@
       recherche: ['Recherché', 'badge-danger'],
       detention: ['En détention', 'badge-warn'],
       liberation_conditionnelle: ['Libération conditionnelle', 'badge-muted'],
+      piste: ['Piste active', 'badge-warn'],
     };
 
     // Regroupe les infractions ajoutées ensemble (même groupe_id) dans un seul bandeau,
@@ -313,6 +327,7 @@
       const container = document.getElementById('casier-content');
       try {
         const { casier, infractions, mandats, photos } = await api(`/casiers/${casierId}`);
+        currentInfractions = infractions;
         const [label, cls] = statutLabels[casier.statut] || ['Inconnu', 'badge-muted'];
         const canManage = user.permissions.peut_gerer_casiers;
         const mandatsActifs = (mandats || []).filter(m => m.actif);

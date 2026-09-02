@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Messagerie — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px; max-width:720px">
+      <div class="section-head">
+        <h1 class="mb-0">Messagerie interne</h1>
+        <button class="btn btn-primary btn-sm" id="new-btn">+ Nouveau message</button>
+      </div>
+
+      <div class="flex gap-8" style="margin-bottom:20px">
+        <button class="btn btn-primary btn-sm" id="tab-recus-btn">Reçus</button>
+        <button class="btn btn-secondary btn-sm" id="tab-envoyes-btn">Envoyés</button>
+      </div>
+
+      <div id="messages-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="compose-modal">
+    <div class="modal">
+      <h3>Nouveau message</h3>
+      <form id="compose-form">
+        <div class="field">
+          <label for="c-destinataire">Destinataire</label>
+          <select id="c-destinataire" required></select>
+        </div>
+        <div class="field">
+          <label for="c-contenu">Message</label>
+          <textarea id="c-contenu" rows="4" required></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="compose-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Envoyer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let user, currentTab = 'recus';
+
+    (async function () {
+      user = await initLayout({ activeKey: 'messages', requireAuth: true });
+      if (!user) return;
+
+      try {
+        const { users: allUsers } = await api('/users');
+        fillDestinataires(allUsers.filter(u => u.statut === 'approuve' && u.id !== user.id));
+      } catch (_) {
+        document.getElementById('c-destinataire').outerHTML = '<input type="text" id="c-destinataire" placeholder="Nom d\'utilisateur exact du destinataire" required />';
+      }
+
+      document.getElementById('new-btn').addEventListener('click', () => {
+        document.getElementById('compose-form').reset();
+        document.getElementById('compose-modal').classList.add('open');
+      });
+      document.getElementById('compose-cancel').addEventListener('click', () => document.getElementById('compose-modal').classList.remove('open'));
+      document.getElementById('compose-form').addEventListener('submit', sendMessage);
+
+      document.getElementById('tab-recus-btn').addEventListener('click', () => switchTab('recus'));
+      document.getElementById('tab-envoyes-btn').addEventListener('click', () => switchTab('envoyes'));
+
+      loadMessages();
+    })();
+
+    function fillDestinataires(users) {
+      const select = document.getElementById('c-destinataire');
+      select.innerHTML = users.map(u => `<option value="${u.id}">${escapeHtml(u.nom_complet || u.username)}</option>`).join('');
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('tab-recus-btn').className = tab === 'recus' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+      document.getElementById('tab-envoyes-btn').className = tab === 'envoyes' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+      loadMessages();
+    }
+
+    async function loadMessages() {
+      const container = document.getElementById('messages-list');
+      container.innerHTML = '<div class="loader">Chargement…</div>';
+      try {
+        const { messages } = await api(`/messages/${currentTab}`);
+        if (messages.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun message.</div>';
+          return;
+        }
+        container.innerHTML = messages.map(m => {
+          const autrePersonne = currentTab === 'recus'
+            ? escapeHtml(m.expediteur_nom || m.expediteur_username || 'Inconnu')
+            : escapeHtml(m.destinataire_nom || m.destinataire_username || 'Inconnu');
+          return `
+          <div class="card" style="margin-bottom:10px; ${currentTab === 'recus' && !m.lu ? 'border-left:4px solid var(--or-400)' : ''}">
+            <div class="flex-between" style="align-items:flex-start">
+              <div>
+                <strong style="font-size:0.9rem">${currentTab === 'recus' ? 'De' : 'À'} : ${autrePersonne}</strong>
+                ${currentTab === 'recus' && !m.lu ? '<span class="badge badge-warn" style="margin-left:6px">Nouveau</span>' : ''}
+                <p class="muted mb-0" style="font-size:0.76rem">${formatDateTime(m.created_at)}</p>
+              </div>
+              <button class="btn btn-danger btn-sm" data-del="${m.id}">✕</button>
+            </div>
+            <p style="font-size:0.88rem; margin-top:8px; white-space:pre-wrap">${escapeHtml(m.contenu)}</p>
+          </div>`;
+        }).join('');
+
+        if (currentTab === 'recus') {
+          messages.filter(m => !m.lu).forEach(m => { api(`/messages/${m.id}/lu`, { method: 'PATCH' }).catch(() => {}); });
+        }
+
+        container.querySelectorAll('[data-del]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce message ?')) return;
+            try { await api(`/messages/${btn.dataset.del}`, { method: 'DELETE' }); loadMessages(); }
+            catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function sendMessage(e) {
+      e.preventDefault();
+      try {
+        await api('/messages', {
+          method: 'POST',
+          body: {
+            destinataire_id: document.getElementById('c-destinataire').value,
+            contenu: document.getElementById('c-contenu').value.trim(),
+          },
+        });
+        toast('Message envoyé.');
+        document.getElementById('compose-modal').classList.remove('open');
+        if (currentTab === 'envoyes') loadMessages();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

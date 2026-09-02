@@ -38,6 +38,7 @@ function buildNavbar(activeKey) {
       linkHtml('planning.html', 'Planning', 'planning'),
       linkHtml('statistiques.html', 'Statistiques', 'statistiques'),
       linkHtml('habitants.html', 'Annuaire', 'habitants'),
+      linkHtml('messages.html', 'Messagerie', 'messages', 'unread-badge'),
       linkHtml('profil.html', 'Mon profil', 'profil'),
     ].join('');
   }
@@ -173,6 +174,16 @@ function buildNavbar(activeKey) {
   if (CURRENT_USER && CURRENT_USER.permissions.peut_valider_comptes) {
     api('/users/pending-count').then(({ count }) => {
       const badge = document.getElementById('pending-badge');
+      if (badge && count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+      }
+    }).catch(() => {});
+  }
+
+  if (CURRENT_USER) {
+    api('/messages/unread-count').then(({ count }) => {
+      const badge = document.getElementById('unread-badge');
       if (badge && count > 0) {
         badge.textContent = count;
         badge.classList.remove('hidden');

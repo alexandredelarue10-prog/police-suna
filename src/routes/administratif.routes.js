@@ -263,4 +263,47 @@ router.get('/stats-comptes', requireAuth, requirePole('Administratif'), async (r
   }
 });
 
+// --- Pointage / présence des agents (une entrée par agent et par jour) ---
+router.get('/presences', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const { rows: users } = await pool.query(
+      `SELECT u.id, u.username, u.nom_complet FROM users u WHERE u.statut = 'approuve' ORDER BY u.username`
+    );
+    const { rows: presences } = await pool.query('SELECT * FROM presences WHERE date_presence = $1', [date]);
+    const parUser = {};
+    presences.forEach((p) => { parUser[p.user_id] = p; });
+
+    const liste = users.map((u) => ({
+      user_id: u.id,
+      nom: u.nom_complet || u.username,
+      present: parUser[u.id] ? parUser[u.id].present : null, // null = pas encore pointé
+      notes: parUser[u.id] ? parUser[u.id].notes : '',
+    }));
+
+    res.json({ date, presences: liste });
+  } catch (err) {
+    console.error('[administratif/presences/list]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.post('/presences', requireAuth, requirePole('Administratif'), async (req, res) => {
+  try {
+    const { user_id, date_presence, present, notes } = req.body;
+    if (!user_id || !date_presence) return res.status(400).json({ error: 'Agent et date sont requis.' });
+    const { rows } = await pool.query(
+      `INSERT INTO presences (user_id, date_presence, present, notes, enregistre_par)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (user_id, date_presence) DO UPDATE SET present = EXCLUDED.present, notes = EXCLUDED.notes, enregistre_par = EXCLUDED.enregistre_par
+       RETURNING *`,
+      [user_id, date_presence, !!present, notes || '', req.session.user.id]
+    );
+    res.status(201).json({ presence: rows[0] });
+  } catch (err) {
+    console.error('[administratif/presences/create]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;

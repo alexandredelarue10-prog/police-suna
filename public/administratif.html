@@ -60,6 +60,14 @@
       </section>
 
       <section>
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.1rem">Pointage</h2>
+          <input type="date" id="pointage-date" style="background:rgba(246,239,220,0.06); color:var(--sable-050); border-color:rgba(217,192,139,0.28); max-width:170px" />
+        </div>
+        <div id="pointage-list"><div class="loader">Chargement…</div></div>
+      </section>
+
+      <section>
         <h2 style="font-size:1.1rem">Statistiques des comptes</h2>
         <div class="stat-row" id="comptes-totaux"></div>
         <div class="grid grid-2" style="margin-top:16px">
@@ -185,7 +193,43 @@
       loadFormations();
       loadConges();
       loadStatsComptes();
+
+      const dateInput = document.getElementById('pointage-date');
+      dateInput.value = new Date().toISOString().slice(0, 10);
+      dateInput.addEventListener('change', loadPointage);
+      loadPointage();
     })();
+
+    async function loadPointage() {
+      const container = document.getElementById('pointage-list');
+      const date = document.getElementById('pointage-date').value;
+      try {
+        const { presences } = await api(`/administratif/presences?date=${date}`);
+        if (presences.length === 0) { container.innerHTML = '<div class="empty-state">Aucun agent approuvé.</div>'; return; }
+        container.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Agent</th><th>Présence</th></tr></thead><tbody>
+          ${presences.map(p => `
+            <tr>
+              <td>${escapeHtml(p.nom)}</td>
+              <td class="flex gap-8">
+                <button class="btn btn-sm ${p.present === true ? 'btn-primary' : 'btn-secondary'}" data-mark="${p.user_id}" data-present="true">Présent</button>
+                <button class="btn btn-sm ${p.present === false ? 'btn-danger' : 'btn-secondary'}" data-mark="${p.user_id}" data-present="false">Absent</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody></table></div>`;
+        container.querySelectorAll('[data-mark]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await api('/administratif/presences', {
+                method: 'POST',
+                body: { user_id: btn.dataset.mark, date_presence: date, present: btn.dataset.present === 'true' },
+              });
+              loadPointage();
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) { container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`; }
+    }
 
     // --- Congés ---
     async function loadConges() {
