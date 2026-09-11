@@ -16,6 +16,47 @@
         </div>
         <button class="btn btn-primary hidden" id="new-btn">+ Planifier un service</button>
       </div>
+
+      <div id="auto-config-section" class="hidden card dark-form" style="margin-bottom:28px">
+        <h3 style="font-size:1rem; margin-top:0">Automatisme du planning</h3>
+        <form id="auto-config-form">
+          <div class="field">
+            <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+              <input type="checkbox" id="ac-actif" style="width:auto" /> Activer la génération automatique
+            </label>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="ac-nombre-agents">Agents par patrouille</label>
+              <input type="number" id="ac-nombre-agents" min="1" max="20" value="2" />
+            </div>
+            <div class="field">
+              <label for="ac-par-jour">Patrouilles par jour</label>
+              <input type="number" id="ac-par-jour" min="1" max="20" value="2" />
+            </div>
+            <div class="field">
+              <label for="ac-jours-avance">Jours à l'avance</label>
+              <input type="number" id="ac-jours-avance" min="1" max="14" value="3" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="ac-heure">Heure de début par défaut</label>
+              <input type="text" id="ac-heure" placeholder="Ex : 08h00" />
+            </div>
+            <div class="field">
+              <label for="ac-duree">Durée (heures)</label>
+              <input type="number" id="ac-duree" min="1" max="24" value="4" />
+            </div>
+          </div>
+          <div class="flex gap-8">
+            <button type="submit" class="btn btn-primary">Enregistrer la configuration</button>
+            <button type="button" class="btn btn-secondary" id="generer-maintenant-btn">Générer maintenant</button>
+          </div>
+          <p class="field-hint" style="margin-top:8px">Les agents sont choisis au hasard parmi les comptes approuvés à chaque génération. Une vérification automatique tourne aussi toutes les heures côté serveur si l'automatisme est activé.</p>
+        </form>
+      </div>
+
       <div id="planning-content"><div class="loader">Chargement…</div></div>
     </div>
   </div>
@@ -99,8 +140,55 @@
       document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('patrol-modal').classList.remove('open'));
       document.getElementById('patrol-form').addEventListener('submit', savePatrol);
       document.getElementById('delete-btn').addEventListener('click', deletePatrol);
+
+      if (user.permissions.peut_configurer_planning) {
+        document.getElementById('auto-config-section').classList.remove('hidden');
+        loadAutoConfig();
+        document.getElementById('auto-config-form').addEventListener('submit', saveAutoConfig);
+        document.getElementById('generer-maintenant-btn').addEventListener('click', genererMaintenant);
+      }
+
       loadPlanning();
     })();
+
+    async function loadAutoConfig() {
+      try {
+        const { config } = await api('/patrouilles/config');
+        if (!config) return;
+        document.getElementById('ac-actif').checked = config.actif;
+        document.getElementById('ac-nombre-agents').value = config.nombre_agents;
+        document.getElementById('ac-par-jour').value = config.patrouilles_par_jour;
+        document.getElementById('ac-jours-avance').value = config.jours_a_l_avance;
+        document.getElementById('ac-heure').value = config.heure_debut_defaut || '';
+        document.getElementById('ac-duree').value = config.duree_heures;
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function saveAutoConfig(e) {
+      e.preventDefault();
+      try {
+        await api('/patrouilles/config', {
+          method: 'PUT',
+          body: {
+            actif: document.getElementById('ac-actif').checked,
+            nombre_agents: parseInt(document.getElementById('ac-nombre-agents').value),
+            patrouilles_par_jour: parseInt(document.getElementById('ac-par-jour').value),
+            jours_a_l_avance: parseInt(document.getElementById('ac-jours-avance').value),
+            heure_debut_defaut: document.getElementById('ac-heure').value.trim(),
+            duree_heures: parseInt(document.getElementById('ac-duree').value),
+          },
+        });
+        toast('Configuration enregistrée.');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function genererMaintenant() {
+      try {
+        const { genere } = await api('/patrouilles/generer', { method: 'POST' });
+        toast(genere > 0 ? `${genere} patrouille(s) générée(s).` : 'Aucune nouvelle patrouille à générer (déjà complet ou automatisme désactivé).');
+        loadPlanning();
+      } catch (err) { toast(err.message, 'error'); }
+    }
 
     async function loadPlanning() {
       const container = document.getElementById('planning-content');
@@ -125,6 +213,7 @@
                 <div class="flex-between">
                   <div>
                     <span class="badge ${cls}">${label}</span>
+                    ${p.auto_genere ? '<span class="badge badge-muted" style="margin-left:4px">Auto</span>' : ''}
                     <strong style="margin-left:6px">${escapeHtml(p.titre)}</strong>
                     <p class="muted mb-0" style="font-size:0.82rem; margin-top:4px">
                       ${p.heure_debut || '—'}${p.heure_fin ? ' – ' + p.heure_fin : ''}

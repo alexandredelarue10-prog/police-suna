@@ -15,17 +15,17 @@ async function run() {
   const { rows: gradeCount } = await pool.query('SELECT COUNT(*)::int AS n FROM grades');
   if (gradeCount[0].n === 0) {
     const grades = [
-      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, reserve
-      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true],
-      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  false],
-      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false],
-      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false],
-      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false],
+      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, configurer_planning, reserve
+      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true,  true],
+      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  true,  false],
+      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false, false],
+      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false, false],
+      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false, false],
     ];
     for (const g of grades) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, reserve)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         g
       );
     }
@@ -35,13 +35,16 @@ async function run() {
     const { rows: fondateurRows } = await pool.query("SELECT id FROM grades WHERE nom = 'Fondateur'");
     if (fondateurRows.length === 0) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, reserve)
-         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true)`
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve)
+         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true, true)`
       );
       console.log('[seed] Grade réservé "Fondateur" ajouté (migration).');
     } else {
-      // S'assure que le grade reste bien marqué comme réservé même après une modification manuelle
-      await pool.query("UPDATE grades SET reserve = TRUE WHERE nom = 'Fondateur' AND reserve = FALSE");
+      // S'assure que le grade reste bien marqué comme réservé et détient toutes les permissions,
+      // même après une modification manuelle ou une migration depuis un ancien schéma.
+      await pool.query(
+        "UPDATE grades SET reserve = TRUE, peut_configurer_planning = TRUE WHERE nom = 'Fondateur' AND (reserve = FALSE OR peut_configurer_planning = FALSE)"
+      );
     }
   }
 
@@ -309,6 +312,16 @@ async function run() {
        ON CONFLICT (user_id, pole_id) DO NOTHING`,
       [devRow[0].id]
     );
+  }
+
+  // --- Configuration du planning automatique (ligne unique, créée si absente) ---
+  const { rows: configCount } = await pool.query('SELECT COUNT(*)::int AS n FROM planning_config');
+  if (configCount[0].n === 0) {
+    await pool.query(
+      `INSERT INTO planning_config (actif, nombre_agents, patrouilles_par_jour, jours_a_l_avance, heure_debut_defaut, duree_heures)
+       VALUES (FALSE, 2, 2, 3, '08h00', 4)`
+    );
+    console.log('[seed] Configuration du planning automatique créée (désactivée par défaut).');
   }
 
   console.log('[seed] Terminé.');

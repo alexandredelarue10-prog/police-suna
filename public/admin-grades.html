@@ -59,8 +59,11 @@
           <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
             <input type="checkbox" id="p-actus" style="width:auto"> Publier des communiqués
           </label>
-          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-bottom:6px">
             <input type="checkbox" id="p-protocoles" style="width:auto"> Gérer les codes d'alerte (protocoles)
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
+            <input type="checkbox" id="p-planning" style="width:auto"> Configurer l'automatisme du planning
           </label>
         </div>
         <div class="field">
@@ -163,6 +166,7 @@
         document.getElementById('p-casiers').checked = grade.peut_gerer_casiers;
         document.getElementById('p-actus').checked = grade.peut_gerer_actus;
         document.getElementById('p-protocoles').checked = grade.peut_gerer_protocoles;
+        document.getElementById('p-planning').checked = grade.peut_configurer_planning;
         document.getElementById('p-reserve').checked = grade.reserve;
       } else {
         document.getElementById('modal-title').textContent = 'Nouveau grade';
@@ -184,6 +188,7 @@
         peut_gerer_casiers: document.getElementById('p-casiers').checked,
         peut_gerer_actus: document.getElementById('p-actus').checked,
         peut_gerer_protocoles: document.getElementById('p-protocoles').checked,
+        peut_configurer_planning: document.getElementById('p-planning').checked,
         reserve: document.getElementById('p-reserve').checked,
       };
       try {

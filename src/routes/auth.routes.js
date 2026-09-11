@@ -13,6 +13,7 @@ async function buildSessionUser(userRow) {
     peut_gerer_casiers: false,
     peut_gerer_actus: false,
     peut_gerer_protocoles: false,
+    peut_configurer_planning: false,
   };
   let gradeNom = null;
   let gradeCouleur = null;
@@ -36,6 +37,7 @@ async function buildSessionUser(userRow) {
         peut_gerer_casiers: g.peut_gerer_casiers,
         peut_gerer_actus: g.peut_gerer_actus,
         peut_gerer_protocoles: g.peut_gerer_protocoles,
+        peut_configurer_planning: g.peut_configurer_planning,
       };
     }
   }

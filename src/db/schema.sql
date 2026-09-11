@@ -14,10 +14,12 @@ CREATE TABLE IF NOT EXISTS grades (
   peut_gerer_casiers BOOLEAN NOT NULL DEFAULT FALSE,
   peut_gerer_actus BOOLEAN NOT NULL DEFAULT FALSE,
   peut_gerer_protocoles BOOLEAN NOT NULL DEFAULT FALSE, -- codes d'alerte
+  peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE, -- automatisation du planning
   reserve BOOLEAN NOT NULL DEFAULT FALSE, -- grade exclusif : ne peut être attribué à personne via l'interface
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS reserve BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- RANGS NINJA (Genin, Chûnin, Kakunin, TKJ, Jônin...) : entièrement modifiables via l'interface admin
 -- Distinct du "grade" (poste au sein de la police) : c'est une étiquette purement informative.
@@ -191,7 +193,20 @@ CREATE TABLE IF NOT EXISTS patrouilles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE patrouilles ADD COLUMN IF NOT EXISTS statut VARCHAR(20) NOT NULL DEFAULT 'planifiee';
+ALTER TABLE patrouilles ADD COLUMN IF NOT EXISTS auto_genere BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_patrouilles_date ON patrouilles(date_service);
+
+-- Configuration de la génération automatique du planning (ligne unique)
+CREATE TABLE IF NOT EXISTS planning_config (
+  id SERIAL PRIMARY KEY,
+  actif BOOLEAN NOT NULL DEFAULT FALSE,
+  nombre_agents INTEGER NOT NULL DEFAULT 2, -- agents par patrouille générée
+  patrouilles_par_jour INTEGER NOT NULL DEFAULT 2,
+  jours_a_l_avance INTEGER NOT NULL DEFAULT 3, -- combien de jours à l'avance générer
+  heure_debut_defaut VARCHAR(10) DEFAULT '08h00',
+  duree_heures INTEGER NOT NULL DEFAULT 4,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- Agents assignés à une patrouille : plusieurs personnes possibles par service
 CREATE TABLE IF NOT EXISTS patrouille_agents (

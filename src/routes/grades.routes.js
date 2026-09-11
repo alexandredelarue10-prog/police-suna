@@ -40,12 +40,12 @@ router.get('/organigramme', async (req, res) => {
 // POST /api/grades — créer un grade
 router.post('/', requireAuth, requirePermission('peut_gerer_grades'), async (req, res) => {
   try {
-    const { nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, reserve } = req.body;
+    const { nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve } = req.body;
     if (!nom) return res.status(400).json({ error: 'Le nom du grade est requis.' });
 
     const { rows } = await pool.query(
-      `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, reserve)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
         nom,
         niveau ?? 0,
@@ -56,6 +56,7 @@ router.post('/', requireAuth, requirePermission('peut_gerer_grades'), async (req
         !!peut_gerer_casiers,
         !!peut_gerer_actus,
         !!peut_gerer_protocoles,
+        !!peut_configurer_planning,
         !!reserve,
       ]
     );
@@ -77,11 +78,11 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_grades'), async (r
       return res.status(403).json({ error: 'Ce grade est réservé et ne peut pas être modifié depuis l\'interface.' });
     }
 
-    const { nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, reserve } = req.body;
+    const { nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve } = req.body;
     const { rows } = await pool.query(
       `UPDATE grades SET nom=$1, niveau=$2, couleur=$3, peut_valider_comptes=$4, peut_gerer_grades=$5,
-              peut_gerer_sanctions=$6, peut_gerer_casiers=$7, peut_gerer_actus=$8, peut_gerer_protocoles=$9, reserve=$10
-       WHERE id=$11 RETURNING *`,
+              peut_gerer_sanctions=$6, peut_gerer_casiers=$7, peut_gerer_actus=$8, peut_gerer_protocoles=$9, peut_configurer_planning=$10, reserve=$11
+       WHERE id=$12 RETURNING *`,
       [
         nom,
         niveau ?? 0,
@@ -92,6 +93,7 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_grades'), async (r
         !!peut_gerer_casiers,
         !!peut_gerer_actus,
         !!peut_gerer_protocoles,
+        !!peut_configurer_planning,
         !!reserve,
         req.params.id,
       ]

@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
+const { genererPlanningAutomatique } = require('../utils/planningAuto');
 
 const router = express.Router();
 
@@ -22,6 +23,61 @@ router.get('/', requireAuth, async (req, res) => {
     res.json({ patrouilles: rows });
   } catch (err) {
     console.error('[patrouilles/list]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// --- Configuration du planning automatique (réservée à la permission dédiée) ---
+// IMPORTANT : ces routes doivent être déclarées AVANT les routes /:id, sinon Express
+// interprète "config" ou "generer" comme une valeur de :id (bug de routage classique).
+
+router.get('/config', requireAuth, requirePermission('peut_configurer_planning'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM planning_config ORDER BY id LIMIT 1');
+    res.json({ config: rows[0] || null });
+  } catch (err) {
+    console.error('[patrouilles/config/get]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.put('/config', requireAuth, requirePermission('peut_configurer_planning'), async (req, res) => {
+  try {
+    const { actif, nombre_agents, patrouilles_par_jour, jours_a_l_avance, heure_debut_defaut, duree_heures } = req.body;
+    const { rows: existing } = await pool.query('SELECT id FROM planning_config ORDER BY id LIMIT 1');
+    if (existing.length === 0) return res.status(404).json({ error: 'Configuration introuvable.' });
+
+    const { rows } = await pool.query(
+      `UPDATE planning_config SET actif=$1, nombre_agents=$2, patrouilles_par_jour=$3, jours_a_l_avance=$4,
+              heure_debut_defaut=$5, duree_heures=$6, updated_at=now()
+       WHERE id=$7 RETURNING *`,
+      [
+        !!actif,
+        Math.max(1, parseInt(nombre_agents) || 2),
+        Math.max(1, parseInt(patrouilles_par_jour) || 2),
+        Math.max(1, Math.min(14, parseInt(jours_a_l_avance) || 3)),
+        heure_debut_defaut || '08h00',
+        Math.max(1, parseInt(duree_heures) || 4),
+        existing[0].id,
+      ]
+    );
+
+    await logActivity(req.session.user.id, req.session.user.username, 'planning_config_modifiee', `Auto: ${actif ? 'activé' : 'désactivé'}, ${nombre_agents} agent(s)/patrouille, ${patrouilles_par_jour}/jour`);
+
+    res.json({ config: rows[0] });
+  } catch (err) {
+    console.error('[patrouilles/config/update]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+router.post('/generer', requireAuth, requirePermission('peut_configurer_planning'), async (req, res) => {
+  try {
+    const result = await genererPlanningAutomatique();
+    await logActivity(req.session.user.id, req.session.user.username, 'planning_genere', `${result.genere} patrouille(s) générée(s)`);
+    res.json(result);
+  } catch (err) {
+    console.error('[patrouilles/generer]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

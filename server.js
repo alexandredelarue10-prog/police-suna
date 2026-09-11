@@ -110,6 +110,17 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`[server] Police de Sunagakure en ligne sur le port ${PORT}`);
     });
+
+    // Génération automatique du planning : vérifiée au démarrage, puis toutes les heures.
+    // Coût négligeable (quelques requêtes SQL), n'agit que si l'automatisme est activé en configuration.
+    const { genererPlanningAutomatique } = require('./src/utils/planningAuto');
+    const runAutoPlanning = () => {
+      genererPlanningAutomatique()
+        .then((r) => { if (r.genere > 0) console.log(`[planning-auto] ${r.genere} patrouille(s) générée(s).`); })
+        .catch((err) => console.error('[planning-auto] Erreur :', err.message));
+    };
+    runAutoPlanning();
+    setInterval(runAutoPlanning, 60 * 60 * 1000); // toutes les heures
   } catch (err) {
     console.error('[server] Échec du démarrage :', err);
     process.exit(1);

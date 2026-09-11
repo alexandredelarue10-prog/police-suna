@@ -15,6 +15,8 @@ const ACTION_LABELS = {
   enquete_ouverte: 'Dossier d\'enquête ouvert',
   incident_signale: 'Incident de sécurité signalé',
   escorte_creee: 'Escorte diplomatique créée',
+  planning_config_modifiee: 'Configuration du planning automatique modifiée',
+  planning_genere: 'Planning automatique généré',
   casier_cree: 'Casier créé',
   casier_supprime: 'Casier supprimé',
   infraction_ajoutee: 'Infraction ajoutée',
