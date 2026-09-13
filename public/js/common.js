@@ -178,24 +178,38 @@ function buildNavbar(activeKey) {
   }
 
   if (CURRENT_USER && CURRENT_USER.permissions.peut_valider_comptes) {
-    api('/users/pending-count').then(({ count }) => {
-      const badge = document.getElementById('pending-badge');
-      if (badge && count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-      }
-    }).catch(() => {});
+    refreshPendingBadge();
   }
 
   if (CURRENT_USER) {
-    api('/messages/unread-count').then(({ count }) => {
-      const badge = document.getElementById('unread-badge');
-      if (badge && count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-      }
-    }).catch(() => {});
+    refreshUnreadBadge();
   }
+}
+
+function refreshPendingBadge() {
+  api('/users/pending-count').then(({ count }) => {
+    const badge = document.getElementById('pending-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }).catch(() => {});
+}
+
+function refreshUnreadBadge() {
+  api('/messages/unread-count').then(({ count }) => {
+    const badge = document.getElementById('unread-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }).catch(() => {});
 }
 
 function buildFooter() {
@@ -214,6 +228,45 @@ function buildFooter() {
   }).catch(() => { /* silencieux : les crédits ne sont pas critiques */ });
 }
 
+// --- Synchronisation en direct entre utilisateurs connectés (Server-Sent Events) ---
+// Chaque page ouvre une seule connexion (partagée par tout le JS de la page) sur /api/events.
+// Les pages s'abonnent via onLive(domaines, callback) pour se rafraîchir automatiquement
+// quand une ressource qui les concerne change ailleurs. onLive(['*'], cb) écoute tout
+// (utilisé par le journal d'activité).
+let liveSource = null;
+const liveListeners = [];
+
+function initLiveSync() {
+  if (!CURRENT_USER || liveSource) return;
+  try {
+    liveSource = new EventSource('/api/events');
+    liveSource.onmessage = (e) => {
+      let payload;
+      try { payload = JSON.parse(e.data); } catch (_) { return; }
+
+      if (payload.domain === 'users') refreshPendingBadge();
+      if (payload.domain === 'messages') refreshUnreadBadge();
+
+      for (const { domains, handler } of liveListeners) {
+        const match = domains.includes('*') || domains.includes(payload.domain);
+        if (match) {
+          try { handler(payload); } catch (_) { /* une page ne doit jamais casser les autres écouteurs */ }
+        }
+      }
+    };
+    // EventSource se reconnecte automatiquement en cas de coupure ; rien à faire ici.
+    liveSource.onerror = () => {};
+  } catch (_) {
+    // Navigateur trop ancien ou EventSource indisponible : le site continue de fonctionner
+    // normalement, simplement sans rafraîchissement automatique.
+  }
+}
+
+// domains : nom de domaine ou tableau de noms à écouter (voir liveSync.js côté serveur pour la liste).
+function onLive(domains, handler) {
+  liveListeners.push({ domains: Array.isArray(domains) ? domains : [domains], handler });
+}
+
 // key: identifiant de la page active. requireAuth: redirige vers login.html si non connecté.
 // requirePerm: nom de permission (colonne grades) requise, sinon redirige vers dashboard.html.
 async function initLayout({ activeKey = '', requireAuth = false, requirePerm = null } = {}) {
@@ -230,5 +283,6 @@ async function initLayout({ activeKey = '', requireAuth = false, requirePerm = n
 
   buildNavbar(activeKey);
   buildFooter();
+  initLiveSync();
   return CURRENT_USER;
 }

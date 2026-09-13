@@ -22,6 +22,7 @@
       const user = await initLayout({ activeKey: 'journal', requireAuth: true, requirePerm: 'peut_valider_comptes' });
       if (!user) return;
       loadJournal();
+      onLive(['*'], loadJournal);
     })();
 
     async function loadJournal() {

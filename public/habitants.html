@@ -59,6 +59,7 @@
       let timer;
       document.getElementById('search-input').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(loadHabitants, 250); });
       loadHabitants();
+      onLive(['habitants'], loadHabitants);
     })();
 
     async function loadHabitants() {

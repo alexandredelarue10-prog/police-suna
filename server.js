@@ -5,6 +5,7 @@ const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const pool = require('./src/config/db');
 const runSeed = require('./src/db/seed');
+const { requireAuth } = require('./src/middleware/auth');
 
 const { router: authRoutes } = require('./src/routes/auth.routes');
 const usersRoutes = require('./src/routes/users.routes');
@@ -32,6 +33,7 @@ const interneRoutes = require('./src/routes/interne.routes');
 const messagesRoutes = require('./src/routes/messages.routes');
 const rolesJudiciairesRoutes = require('./src/routes/roles-judiciaires.routes');
 const judiciaireRoutes = require('./src/routes/judiciaire.routes');
+const { sseHandler } = require('./src/utils/liveSync');
 require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
 
 const app = express();
@@ -100,6 +102,9 @@ app.use('/api/judiciaire', judiciaireRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Synchronisation en direct entre utilisateurs connectés (Server-Sent Events, voir src/utils/liveSync.js)
+app.get('/api/events', requireAuth, sseHandler);
 
 // Toute autre route -> page 404 statique (le front est en pages HTML distinctes, pas de SPA routing complexe)
 app.use((req, res) => {

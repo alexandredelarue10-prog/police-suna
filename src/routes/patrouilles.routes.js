@@ -4,6 +4,7 @@ const { requireAuth, requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
 const { genererPlanningAutomatique } = require('../utils/planningAuto');
 const { notifierUser } = require('../utils/discordNotifier');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
 
@@ -141,6 +142,7 @@ router.put('/:id', requireAuth, requirePermission('peut_valider_comptes'), async
       notifierAgentsPatrouille(agent_ids, rows[0].titre, rows[0].date_service);
     }
 
+    broadcast('patrouilles', { action: 'patrouille_modifiee', details: `${rows[0].titre} — ${rows[0].date_service}` });
     res.json({ patrouille: rows[0] });
   } catch (err) {
     console.error('[patrouilles/update]', err);

@@ -71,6 +71,7 @@
       polesCache = poles;
       rolesJudCache = roles;
       loadUsers();
+      onLive(['users'], loadUsers);
 
       document.getElementById('dossier-close').addEventListener('click', () => document.getElementById('dossier-modal').classList.remove('open'));
       document.getElementById('dossier-form').addEventListener('submit', async (e) => {

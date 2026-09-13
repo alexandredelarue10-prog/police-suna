@@ -70,6 +70,7 @@
       document.getElementById('tab-envoyes-btn').addEventListener('click', () => switchTab('envoyes'));
 
       loadMessages();
+      onLive(['messages'], loadMessages);
     })();
 
     function fillDestinataires(users) {

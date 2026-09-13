@@ -71,6 +71,8 @@
       document.getElementById('new-form').addEventListener('submit', createAffaire);
       loadAnnuaire();
       loadAffaires();
+      onLive(['users'], loadAnnuaire);
+      onLive(['judiciaire'], loadAffaires);
     })();
 
     async function loadAnnuaire() {

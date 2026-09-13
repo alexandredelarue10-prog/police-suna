@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ router.post('/annonces', requireAuth, requirePermission('peut_gerer_actus'), asy
       'INSERT INTO annonces_internes (titre, contenu, auteur_id) VALUES ($1,$2,$3) RETURNING *',
       [titre, contenu, req.session.user.id]
     );
+    broadcast('annonces', { action: 'annonce_publiee' });
     res.status(201).json({ annonce: rows[0] });
   } catch (err) {
     console.error('[interne/annonces/create]', err);
@@ -37,6 +39,7 @@ router.delete('/annonces/:id', requireAuth, requirePermission('peut_gerer_actus'
   try {
     const { rows } = await pool.query('DELETE FROM annonces_internes WHERE id = $1 RETURNING id', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Annonce introuvable.' });
+    broadcast('annonces', { action: 'annonce_supprimee' });
     res.json({ message: 'Annonce supprimée.' });
   } catch (err) {
     console.error('[interne/annonces/delete]', err);
@@ -69,6 +72,7 @@ router.post('/habitants', requireAuth, async (req, res) => {
       `INSERT INTO habitants (nom, prenom, village, profession, description, cree_par) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [nom, prenom || '', village || '', profession || '', description || '', req.session.user.id]
     );
+    broadcast('habitants', { action: 'habitant_ajoute' });
     res.status(201).json({ habitant: rows[0] });
   } catch (err) {
     console.error('[interne/habitants/create]', err);
@@ -85,6 +89,7 @@ router.put('/habitants/:id', requireAuth, async (req, res) => {
       [nom, prenom || '', village || '', profession || '', description || '', req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Habitant introuvable.' });
+    broadcast('habitants', { action: 'habitant_modifie' });
     res.json({ habitant: rows[0] });
   } catch (err) {
     console.error('[interne/habitants/update]', err);
@@ -96,6 +101,7 @@ router.delete('/habitants/:id', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query('DELETE FROM habitants WHERE id = $1 RETURNING id', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Habitant introuvable.' });
+    broadcast('habitants', { action: 'habitant_supprime' });
     res.json({ message: 'Habitant supprimé.' });
   } catch (err) {
     console.error('[interne/habitants/delete]', err);

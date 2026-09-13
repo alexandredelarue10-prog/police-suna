@@ -55,6 +55,7 @@
       });
 
       loadPlaintes();
+      onLive(['plaintes'], loadPlaintes);
       let timer;
       const trigger = () => { clearTimeout(timer); timer = setTimeout(loadPlaintes, 250); };
       document.getElementById('search-input').addEventListener('input', trigger);

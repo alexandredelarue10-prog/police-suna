@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { notifierUser } = require('./discordNotifier');
+const { broadcast } = require('./liveSync');
 
 // Génère automatiquement des patrouilles pour les prochains jours, selon la configuration
 // active (nombre d'agents par patrouille, patrouilles par jour, jours à l'avance).
@@ -49,6 +50,9 @@ async function genererPlanningAutomatique() {
     }
   }
 
+  if (totalGenere > 0) {
+    broadcast('patrouilles', { action: 'planning_genere_auto', details: `${totalGenere} patrouille(s) générée(s) automatiquement` });
+  }
   return { genere: totalGenere };
 }
 

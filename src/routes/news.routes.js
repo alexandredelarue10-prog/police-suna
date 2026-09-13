@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.post('/', requireAuth, requirePermission('peut_gerer_actus'), async (req,
       `INSERT INTO actus (titre, contenu, auteur_id, epingle) VALUES ($1,$2,$3,$4) RETURNING *`,
       [titre, contenu, req.session.user.id, !!epingle]
     );
+    broadcast('actus', { action: 'actu_publiee' });
     res.status(201).json({ actu: rows[0] });
   } catch (err) {
     console.error('[actus/create]', err);
@@ -46,6 +48,7 @@ router.put('/:id', requireAuth, requirePermission('peut_gerer_actus'), async (re
       [titre, contenu, !!epingle, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Actualité introuvable.' });
+    broadcast('actus', { action: 'actu_modifiee' });
     res.json({ actu: rows[0] });
   } catch (err) {
     console.error('[actus/update]', err);
@@ -58,6 +61,7 @@ router.delete('/:id', requireAuth, requirePermission('peut_gerer_actus'), async 
   try {
     const { rows } = await pool.query('DELETE FROM actus WHERE id = $1 RETURNING titre', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Actualité introuvable.' });
+    broadcast('actus', { action: 'actu_supprimee' });
     res.json({ message: `Actualité "${rows[0].titre}" supprimée.` });
   } catch (err) {
     console.error('[actus/delete]', err);

@@ -53,6 +53,7 @@
       const user = await initLayout({ activeKey: 'admin-actus', requireAuth: true, requirePerm: 'peut_gerer_actus' });
       if (!user) return;
       loadActus();
+      onLive(['actus'], loadActus);
       document.getElementById('new-actu-btn').addEventListener('click', () => openModal());
       document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('actu-modal').classList.remove('open'));
       document.getElementById('actu-form').addEventListener('submit', saveActu);
