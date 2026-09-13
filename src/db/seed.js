@@ -15,17 +15,17 @@ async function run() {
   const { rows: gradeCount } = await pool.query('SELECT COUNT(*)::int AS n FROM grades');
   if (gradeCount[0].n === 0) {
     const grades = [
-      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, configurer_planning, reserve
-      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true,  true],
-      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  true,  false],
-      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false, false],
-      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false, false],
-      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false, false],
+      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, configurer_planning, gerer_id_discord, reserve
+      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true,  true,  true],
+      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  true,  true,  false],
+      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false, false, false],
+      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false, false, false],
+      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false, false, false],
     ];
     for (const g of grades) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, reserve)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         g
       );
     }
@@ -35,15 +35,15 @@ async function run() {
     const { rows: fondateurRows } = await pool.query("SELECT id FROM grades WHERE nom = 'Fondateur'");
     if (fondateurRows.length === 0) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, reserve)
-         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true, true)`
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, reserve)
+         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true, true, true)`
       );
       console.log('[seed] Grade réservé "Fondateur" ajouté (migration).');
     } else {
       // S'assure que le grade reste bien marqué comme réservé et détient toutes les permissions,
       // même après une modification manuelle ou une migration depuis un ancien schéma.
       await pool.query(
-        "UPDATE grades SET reserve = TRUE, peut_configurer_planning = TRUE WHERE nom = 'Fondateur' AND (reserve = FALSE OR peut_configurer_planning = FALSE)"
+        "UPDATE grades SET reserve = TRUE, peut_configurer_planning = TRUE, peut_gerer_id_discord = TRUE WHERE nom = 'Fondateur' AND (reserve = FALSE OR peut_configurer_planning = FALSE OR peut_gerer_id_discord = FALSE)"
       );
     }
   }

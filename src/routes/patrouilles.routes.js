@@ -3,8 +3,18 @@ const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
 const { genererPlanningAutomatique } = require('../utils/planningAuto');
+const { notifierUser } = require('../utils/discordNotifier');
 
 const router = express.Router();
+
+// Notifie chaque agent d'une liste qu'il est assigné à une patrouille (best-effort, non-bloquant)
+function notifierAgentsPatrouille(agentIds, titre, dateService) {
+  if (!Array.isArray(agentIds)) return;
+  for (const uid of agentIds) {
+    notifierUser(uid, `🚨 Tu as été assigné à la patrouille "${titre}" (${dateService}).`)
+      .catch((err) => console.error('[discord] notif planning_assigne', err.message));
+  }
+}
 
 // GET /api/patrouilles — liste (tout utilisateur connecté peut consulter le planning)
 router.get('/', requireAuth, async (req, res) => {
@@ -98,6 +108,7 @@ router.post('/', requireAuth, requirePermission('peut_valider_comptes'), async (
       for (const uid of agent_ids) {
         await pool.query('INSERT INTO patrouille_agents (patrouille_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rows[0].id, uid]);
       }
+      notifierAgentsPatrouille(agent_ids, rows[0].titre, rows[0].date_service);
     }
 
     await logActivity(req.session.user.id, req.session.user.username, 'patrouille_creee', `${titre} — ${date_service}`);
@@ -127,6 +138,7 @@ router.put('/:id', requireAuth, requirePermission('peut_valider_comptes'), async
       for (const uid of agent_ids) {
         await pool.query('INSERT INTO patrouille_agents (patrouille_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, uid]);
       }
+      notifierAgentsPatrouille(agent_ids, rows[0].titre, rows[0].date_service);
     }
 
     res.json({ patrouille: rows[0] });

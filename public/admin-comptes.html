@@ -23,9 +23,9 @@
       <div class="table-wrap">
         <table id="users-table">
           <thead>
-            <tr><th>Utilisateur</th><th>Nom complet</th><th>Grade (poste)</th><th>Rang ninja</th><th>Pôles</th><th>Statut</th><th>Matricule</th><th></th></tr>
+            <tr><th>Utilisateur</th><th>Nom complet</th><th>Grade (poste)</th><th>Rang ninja</th><th>Pôles</th><th>Discord</th><th>Statut</th><th>Matricule</th><th></th></tr>
           </thead>
-          <tbody><tr><td colspan="8" class="loader">Chargement…</td></tr></tbody>
+          <tbody><tr><td colspan="9" class="loader">Chargement…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -121,6 +121,17 @@
       </div>`;
     }
 
+    // Champ ID Discord : éditable uniquement si le compte connecté a la permission dédiée
+    function discordCellHtml(u) {
+      if (!CURRENT_USER.permissions.peut_gerer_id_discord) {
+        return `<span class="muted" style="font-size:0.8rem">${escapeHtml(u.discord_id || '—')}</span>`;
+      }
+      return `<div class="flex gap-8" style="align-items:center">
+        <input type="text" class="discord-input" value="${escapeHtml(u.discord_id || '')}" placeholder="ID Discord" style="width:150px; font-size:0.78rem" />
+        <button class="btn btn-secondary btn-sm" data-save-discord="${u.id}">OK</button>
+      </div>`;
+    }
+
     async function loadUsers() {
       try {
         const { users } = await api('/users');
@@ -186,7 +197,7 @@
       const tbody = document.querySelector('#users-table tbody');
       const approved = users.filter(u => u.statut !== 'en_attente');
       if (approved.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Aucun compte.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Aucun compte.</td></tr>';
         return;
       }
       tbody.innerHTML = approved.map(u => {
@@ -204,6 +215,7 @@
                 ? `<span class="muted" title="${lockReason}">${(u.poles || []).map(p => escapeHtml(p.nom)).join(', ') || '—'} 🔒</span>`
                 : `<div class="pole-cell">${polesCheckboxHtml(u.poles)}<button class="btn btn-secondary btn-sm" data-save-poles="${u.id}" style="margin-top:4px">Enregistrer</button></div>`}
             </td>
+            <td>${discordCellHtml(u)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
             <td>${u.protege ? '' : `<div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-dossier="${u.id}" data-username="${escapeHtml(u.username)}">Dossier</button><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></div>`}</td>
@@ -238,6 +250,17 @@
             await api(`/users/${btn.dataset.savePoles}/poles`, { method: 'PATCH', body: { pole_ids: checkedIds } });
             toast('Pôles mis à jour.');
             loadUsers();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      tbody.querySelectorAll('[data-save-discord]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('tr');
+          const input = row.querySelector('.discord-input');
+          const value = input.value.trim();
+          try {
+            await api(`/users/${btn.dataset.saveDiscord}/discord`, { method: 'PATCH', body: { discord_id: value || null } });
+            toast('ID Discord enregistré.');
           } catch (err) { toast(err.message, 'error'); }
         });
       });

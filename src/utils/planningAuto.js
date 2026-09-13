@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { notifierUser } = require('./discordNotifier');
 
 // Génère automatiquement des patrouilles pour les prochains jours, selon la configuration
 // active (nombre d'agents par patrouille, patrouilles par jour, jours à l'avance).
@@ -41,6 +42,8 @@ async function genererPlanningAutomatique() {
           'INSERT INTO patrouille_agents (patrouille_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
           [patRows[0].id, agent.id]
         );
+        notifierUser(agent.id, `🚨 Tu as été assigné à la patrouille automatique "Patrouille automatique ${numero}" (${dateStr}).`)
+          .catch((err) => console.error('[discord] notif planning_assigne (auto)', err.message));
       }
       totalGenere++;
     }

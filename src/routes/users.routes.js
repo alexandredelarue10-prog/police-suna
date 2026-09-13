@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
+const { notifierUser } = require('../utils/discordNotifier');
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.get('/pending-count', requireAuth, requirePermission('peut_valider_compte
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login,
+      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login, u.discord_id,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
               r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur,
               COALESCE(
@@ -71,6 +72,8 @@ router.post('/:id/approve', requireAuth, requirePermission('peut_valider_comptes
     if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
 
     await logActivity(req.session.user.id, req.session.user.username, 'compte_valide', `${rows[0].username} validé`);
+    notifierUser(rows[0].id, `✅ Ton compte "${rows[0].username}" a été validé sur le site de la Police de Sunagakure.`)
+      .catch((err) => console.error('[discord] notif compte_valide', err.message));
 
     res.json({ message: `Compte ${rows[0].username} validé.` });
   } catch (err) {
@@ -122,6 +125,8 @@ router.patch('/:id/grade', requireAuth, requirePermission('peut_valider_comptes'
       [grade_id || null, targetId]
     );
     await logActivity(req.session.user.id, req.session.user.username, 'grade_modifie', `Grade de ${rows[0].username} modifié`);
+    notifierUser(rows[0].id, `🎖️ Ton grade a été modifié sur le site de la Police de Sunagakure.`)
+      .catch((err) => console.error('[discord] notif grade_modifie', err.message));
     res.json({ message: `Grade de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/grade]', err);
@@ -150,6 +155,8 @@ router.patch('/:id/rang', requireAuth, requirePermission('peut_valider_comptes')
       [rang_id || null, brigade !== undefined ? brigade : '', targetId]
     );
     await logActivity(req.session.user.id, req.session.user.username, 'rang_modifie', `Rang de ${rows[0].username} modifié`);
+    notifierUser(rows[0].id, `🥷 Ton rang ninja a été modifié sur le site de la Police de Sunagakure.`)
+      .catch((err) => console.error('[discord] notif rang_modifie', err.message));
     res.json({ message: `Rang de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/rang]', err);
@@ -184,6 +191,31 @@ router.patch('/:id/poles', requireAuth, requirePermission('peut_valider_comptes'
     res.json({ message: `Pôles de ${targetRows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/poles]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PATCH /api/users/:id/discord — renseigne l'ID Discord d'un compte (réservé à la permission dédiée)
+router.patch('/:id/discord', requireAuth, requirePermission('peut_gerer_id_discord'), async (req, res) => {
+  try {
+    const { discord_id } = req.body;
+    const value = discord_id ? String(discord_id).trim() : null;
+
+    // Un ID Discord (Snowflake) est purement numérique, 17 à 20 chiffres
+    if (value && !/^\d{17,20}$/.test(value)) {
+      return res.status(400).json({ error: "ID Discord invalide (doit être un identifiant numérique Discord, 17 à 20 chiffres)." });
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE users SET discord_id = $1 WHERE id = $2 RETURNING id, username, discord_id',
+      [value, req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+
+    await logActivity(req.session.user.id, req.session.user.username, 'discord_id_modifie', `ID Discord de ${rows[0].username} mis à jour`);
+    res.json({ message: `ID Discord de ${rows[0].username} mis à jour.`, discord_id: rows[0].discord_id });
+  } catch (err) {
+    console.error('[users/discord]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

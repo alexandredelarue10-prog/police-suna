@@ -15,11 +15,13 @@ CREATE TABLE IF NOT EXISTS grades (
   peut_gerer_actus BOOLEAN NOT NULL DEFAULT FALSE,
   peut_gerer_protocoles BOOLEAN NOT NULL DEFAULT FALSE, -- codes d'alerte
   peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE, -- automatisation du planning
+  peut_gerer_id_discord BOOLEAN NOT NULL DEFAULT FALSE, -- renseigner l'ID Discord d'un compte (notifications par DM)
   reserve BOOLEAN NOT NULL DEFAULT FALSE, -- grade exclusif : ne peut être attribué à personne via l'interface
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS reserve BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_gerer_id_discord BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- RANGS NINJA (Genin, Chûnin, Kakunin, TKJ, Jônin...) : entièrement modifiables via l'interface admin
 -- Distinct du "grade" (poste au sein de la police) : c'est une étiquette purement informative.
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS users (
   statut VARCHAR(20) NOT NULL DEFAULT 'en_attente', -- en_attente | approuve | refuse
   matricule VARCHAR(20) UNIQUE,
   protege BOOLEAN NOT NULL DEFAULT FALSE, -- compte protégé (ex: DEV) : grade/rang/suppression verrouillés
+  discord_id VARCHAR(32) DEFAULT NULL, -- ID Discord (Snowflake) pour l'envoi de notifications par DM
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   valide_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
   valide_le TIMESTAMPTZ
@@ -53,6 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Migrations idempotentes : ajoutent les colonnes si la table existait déjà sans elles
 ALTER TABLE users ADD COLUMN IF NOT EXISTS protege BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rang_id INTEGER REFERENCES rangs_ninja(id) ON DELETE SET NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(32) DEFAULT NULL;
 
 -- TYPES DE SANCTIONS (code pénal) : entièrement modifiables (article, amende, cellule/TIG, gravité...)
 CREATE TABLE IF NOT EXISTS sanctions_types (

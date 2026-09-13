@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
+const { notifierUser } = require('../utils/discordNotifier');
 
 const router = express.Router();
 
@@ -60,6 +61,13 @@ router.post('/', requireAuth, async (req, res) => {
       'INSERT INTO messages (expediteur_id, destinataire_id, contenu) VALUES ($1,$2,$3) RETURNING *',
       [req.session.user.id, destinataire_id, contenu.trim()]
     );
+
+    const apercu = contenu.trim().slice(0, 200);
+    notifierUser(
+      destinataire_id,
+      `📨 Nouveau message interne de ${req.session.user.nom_complet || req.session.user.username} : "${apercu}${contenu.trim().length > 200 ? '…' : ''}"`
+    ).catch((err) => console.error('[discord] notif message_interne', err.message));
+
     res.status(201).json({ message: rows[0] });
   } catch (err) {
     console.error('[messages/create]', err);

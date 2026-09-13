@@ -30,6 +30,7 @@ const enquetesRoutes = require('./src/routes/enquetes.routes');
 const securiteRoutes = require('./src/routes/securite.routes');
 const interneRoutes = require('./src/routes/interne.routes');
 const messagesRoutes = require('./src/routes/messages.routes');
+require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
 
 const app = express();
 const PORT = process.env.PORT || 3000;

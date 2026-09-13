@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
+const { notifierUser } = require('../utils/discordNotifier');
 
 const router = express.Router();
 
@@ -46,6 +47,8 @@ router.post('/:id/blames', requireAuth, requirePermission('peut_valider_comptes'
       req.session.user.id, req.session.user.username, 'blame_applique',
       `Blâme niveau ${blame_niveau} appliqué à ${targetRows[0].username}${motif ? ' — ' + motif : ''}`
     );
+    notifierUser(targetId, `⚠️ Un blâme (niveau ${blame_niveau}) a été appliqué à ton dossier disciplinaire.${motif ? ' Motif : ' + motif : ''}`)
+      .catch((err) => console.error('[discord] notif blame_applique', err.message));
 
     res.status(201).json({ blame: rows[0] });
   } catch (err) {
