@@ -33,6 +33,7 @@ router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (r
       `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login, u.discord_id,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
               r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur,
+              rj.id AS role_judiciaire_id, rj.nom AS role_judiciaire_nom, rj.couleur AS role_judiciaire_couleur,
               COALESCE(
                 (SELECT json_agg(json_build_object('id', p.id, 'nom', p.nom, 'couleur', p.couleur))
                  FROM user_poles up JOIN poles p ON p.id = up.pole_id WHERE up.user_id = u.id),
@@ -41,6 +42,7 @@ router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (r
        FROM users u
        LEFT JOIN grades g ON g.id = u.grade_id
        LEFT JOIN rangs_ninja r ON r.id = u.rang_id
+       LEFT JOIN roles_judiciaires rj ON rj.id = u.role_judiciaire_id
        ORDER BY (u.statut = 'en_attente') DESC, u.created_at DESC`
     );
     res.json({ users: rows });
@@ -216,6 +218,27 @@ router.patch('/:id/discord', requireAuth, requirePermission('peut_gerer_id_disco
     res.json({ message: `ID Discord de ${rows[0].username} mis à jour.`, discord_id: rows[0].discord_id });
   } catch (err) {
     console.error('[users/discord]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PATCH /api/users/:id/role-judiciaire — attribue un rôle judiciaire (Avocat, Procureur, Juge...)
+router.patch('/:id/role-judiciaire', requireAuth, requirePermission('peut_gerer_judiciaire'), async (req, res) => {
+  try {
+    const { role_judiciaire_id } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE users SET role_judiciaire_id = $1 WHERE id = $2 RETURNING id, username',
+      [role_judiciaire_id || null, req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+
+    await logActivity(req.session.user.id, req.session.user.username, 'role_judiciaire_modifie', `Rôle judiciaire de ${rows[0].username} mis à jour`);
+    notifierUser(rows[0].id, `⚖️ Ton rôle judiciaire a été mis à jour sur le site de la Police de Sunagakure.`)
+      .catch((err) => console.error('[discord] notif role_judiciaire_modifie', err.message));
+
+    res.json({ message: `Rôle judiciaire de ${rows[0].username} mis à jour.` });
+  } catch (err) {
+    console.error('[users/role-judiciaire]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

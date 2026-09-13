@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Affaire judiciaire — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px; max-width:760px">
+      <p><a href="judiciaire.html">← Retour au pôle Judiciaire</a></p>
+      <div id="content"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    let affaireId;
+    let membresCache = [];
+    const statutOptions = [
+      ['ouverte', 'Ouverte'],
+      ['audience_programmee', 'Audience programmée'],
+      ['jugee', 'Jugée'],
+      ['classee', 'Classée'],
+    ];
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'judiciaire', requireAuth: true });
+      if (!user || !user.poles.includes('Judiciaire')) { window.location.href = 'dashboard.html'; return; }
+      affaireId = new URLSearchParams(window.location.search).get('id');
+      if (!affaireId) { window.location.href = 'judiciaire.html'; return; }
+      try { membresCache = (await api('/judiciaire/annuaire')).membres; } catch (_) { /* silencieux */ }
+      loadDetail();
+    })();
+
+    function intervenantSelectHtml(idAttr, selectedId) {
+      return `<select id="${idAttr}">
+        <option value="">— Non désigné —</option>
+        ${membresCache.map(m => `<option value="${m.id}" ${String(m.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(m.nom_complet || m.username)}${m.role_judiciaire_nom ? ' (' + escapeHtml(m.role_judiciaire_nom) + ')' : ''}</option>`).join('')}
+      </select>`;
+    }
+
+    async function loadDetail() {
+      try {
+        const { affaire, casiers, plaintes, evenements } = await api(`/judiciaire/${affaireId}`);
+        render(affaire, casiers, plaintes, evenements);
+      } catch (err) {
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function render(affaire, casiers, plaintes, evenements) {
+      document.getElementById('content').innerHTML = `
+        <div class="card dark-form">
+          <h1 style="margin-top:0">${escapeHtml(affaire.numero)}</h1>
+          <form id="a-form">
+            <div class="field">
+              <label for="a-titre">Titre *</label>
+              <input type="text" id="a-titre" required value="${escapeHtml(affaire.titre)}" />
+            </div>
+            <div class="field">
+              <label for="a-description">Description</label>
+              <textarea id="a-description" rows="4">${escapeHtml(affaire.description || '')}</textarea>
+            </div>
+            <div class="field">
+              <label for="a-statut">Statut</label>
+              <select id="a-statut">${statutOptions.map(([v, l]) => `<option value="${v}" ${v === affaire.statut ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="a-avocat">Avocat</label>
+                ${intervenantSelectHtml('a-avocat', affaire.avocat_id)}
+              </div>
+              <div class="field">
+                <label for="a-procureur">Procureur</label>
+                ${intervenantSelectHtml('a-procureur', affaire.procureur_id)}
+              </div>
+              <div class="field">
+                <label for="a-juge">Juge</label>
+                ${intervenantSelectHtml('a-juge', affaire.juge_id)}
+              </div>
+            </div>
+            <div class="field">
+              <label for="a-date-audience">Date d'audience</label>
+              <input type="datetime-local" id="a-date-audience" value="${affaire.date_audience ? affaire.date_audience.slice(0, 16) : ''}" />
+            </div>
+            <div class="field">
+              <label for="a-verdict">Verdict</label>
+              <textarea id="a-verdict" rows="3">${escapeHtml(affaire.verdict || '')}</textarea>
+            </div>
+            <div class="field">
+              <label for="a-peine">Peine</label>
+              <input type="text" id="a-peine" value="${escapeHtml(affaire.peine || '')}" placeholder="ex : 3 jours de prison, amende de 200 ryôs..." />
+            </div>
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <button type="button" class="btn btn-danger" id="delete-btn" style="margin-left:8px">Supprimer l'affaire</button>
+          </form>
+        </div>
+
+        <section style="padding:28px 0 12px">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Casiers liés</h2>
+            <button class="btn btn-secondary btn-sm" id="link-casier-btn">+ Lier un casier</button>
+          </div>
+          <div id="casiers-list">
+            ${casiers.length === 0 ? '<div class="empty-state">Aucun casier lié.</div>' : casiers.map(c => `
+              <div class="flex-between" style="padding:8px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                <a href="casier-detail.html?id=${c.id}">${escapeHtml(c.nom)} ${escapeHtml(c.prenom || '')} <span class="badge badge-muted">${escapeHtml(c.statut)}</span></a>
+                <button class="btn btn-danger btn-sm" data-unlink-casier="${c.id}">Délier</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <section style="padding:12px 0">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Plaintes liées</h2>
+            <button class="btn btn-secondary btn-sm" id="link-plainte-btn">+ Lier une plainte</button>
+          </div>
+          <div id="plaintes-list">
+            ${plaintes.length === 0 ? '<div class="empty-state">Aucune plainte liée.</div>' : plaintes.map(p => `
+              <div class="flex-between" style="padding:8px 0; border-bottom:1px solid rgba(217,192,139,0.12)">
+                <a href="plainte-detail.html?id=${p.id}">${escapeHtml(p.numero)} — ${escapeHtml(p.plaignant_nom)} <span class="badge badge-muted">${escapeHtml(p.statut)}</span></a>
+                <button class="btn btn-danger btn-sm" data-unlink-plainte="${p.id}">Délier</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <section style="padding:12px 0">
+          <div class="section-head">
+            <h2 class="mb-0" style="font-size:1.05rem">Chronologie / audiences</h2>
+            <button class="btn btn-secondary btn-sm" id="add-evenement-btn">+ Ajouter un événement</button>
+          </div>
+          <div id="evenements-list">
+            ${evenements.length === 0 ? '<div class="empty-state">Aucun événement enregistré.</div>' : evenements.map(ev => `
+              <div class="flex-between" style="padding:10px 0; border-bottom:1px solid rgba(217,192,139,0.12); align-items:flex-start">
+                <div>
+                  <strong style="font-size:0.85rem">${ev.date_evenement ? formatDate(ev.date_evenement) : 'Date non précisée'}</strong>
+                  <p class="mb-0" style="font-size:0.86rem; margin-top:2px">${escapeHtml(ev.description)}</p>
+                  <p class="muted mb-0" style="font-size:0.74rem">${escapeHtml(ev.cree_par_username || '—')}</p>
+                </div>
+                <button class="btn btn-danger btn-sm" data-del-evenement="${ev.id}">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      `;
+
+      document.getElementById('a-form').addEventListener('submit', saveAffaire);
+      document.getElementById('delete-btn').addEventListener('click', deleteAffaire);
+      document.getElementById('link-casier-btn').addEventListener('click', linkCasier);
+      document.getElementById('link-plainte-btn').addEventListener('click', linkPlainte);
+      document.querySelectorAll('[data-unlink-casier]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/judiciaire/${affaireId}/casiers/${btn.dataset.unlinkCasier}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      document.querySelectorAll('[data-unlink-plainte]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/judiciaire/${affaireId}/plaintes/${btn.dataset.unlinkPlainte}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      document.getElementById('add-evenement-btn').addEventListener('click', addEvenement);
+      document.querySelectorAll('[data-del-evenement]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await api(`/judiciaire/evenements/${btn.dataset.delEvenement}`, { method: 'DELETE' }); loadDetail(); }
+          catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+
+    async function addEvenement() {
+      const description = prompt('Description de l\'événement (audience, dépôt de conclusions...) :');
+      if (!description || !description.trim()) return;
+      const date_evenement = prompt('Date (AAAA-MM-JJ, optionnel) :', new Date().toISOString().slice(0, 10));
+      try {
+        await api(`/judiciaire/${affaireId}/evenements`, { method: 'POST', body: { description: description.trim(), date_evenement: date_evenement || null } });
+        toast('Événement ajouté.');
+        loadDetail();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function saveAffaire(e) {
+      e.preventDefault();
+      const dateAudience = document.getElementById('a-date-audience').value;
+      try {
+        await api(`/judiciaire/${affaireId}`, {
+          method: 'PUT',
+          body: {
+            titre: document.getElementById('a-titre').value.trim(),
+            description: document.getElementById('a-description').value.trim(),
+            statut: document.getElementById('a-statut').value,
+            avocat_id: document.getElementById('a-avocat').value || null,
+            procureur_id: document.getElementById('a-procureur').value || null,
+            juge_id: document.getElementById('a-juge').value || null,
+            date_audience: dateAudience ? new Date(dateAudience).toISOString() : null,
+            verdict: document.getElementById('a-verdict').value.trim(),
+            peine: document.getElementById('a-peine').value.trim(),
+          },
+        });
+        toast('Affaire mise à jour.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function deleteAffaire() {
+      if (!confirm('Supprimer définitivement cette affaire ?')) return;
+      try {
+        await api(`/judiciaire/${affaireId}`, { method: 'DELETE' });
+        toast('Affaire supprimée.');
+        window.location.href = 'judiciaire.html';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function linkCasier() {
+      const query = prompt('Rechercher un casier par nom :');
+      if (!query) return;
+      try {
+        const { casiers } = await api(`/casiers?q=${encodeURIComponent(query)}`);
+        if (casiers.length === 0) { toast('Aucun casier trouvé.', 'error'); return; }
+        const choice = casiers.length === 1 ? casiers[0] : casiers.find(c => confirm(`Lier ${c.nom} ${c.prenom || ''} ?`));
+        if (!choice) return;
+        await api(`/judiciaire/${affaireId}/casiers`, { method: 'POST', body: { casier_id: choice.id } });
+        toast('Casier lié.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function linkPlainte() {
+      const query = prompt('Rechercher une plainte par plaignant, mis en cause, ou numéro :');
+      if (!query) return;
+      try {
+        const { plaintes } = await api(`/plaintes?q=${encodeURIComponent(query)}`);
+        if (plaintes.length === 0) { toast('Aucune plainte trouvée.', 'error'); return; }
+        const choice = plaintes.length === 1 ? plaintes[0] : plaintes.find(p => confirm(`Lier ${p.numero} — ${p.plaignant_nom} ?`));
+        if (!choice) return;
+        await api(`/judiciaire/${affaireId}/plaintes`, { method: 'POST', body: { plainte_id: choice.id } });
+        toast('Plainte liée.');
+        loadDetail();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -55,6 +55,9 @@ function buildNavbar(activeKey) {
     if (CURRENT_USER.poles.includes('Sécurité')) {
       poleLinks += linkHtml('securite.html', 'Sécurité', 'securite');
     }
+    if (CURRENT_USER.poles.includes('Judiciaire')) {
+      poleLinks += linkHtml('judiciaire.html', 'Judiciaire', 'judiciaire');
+    }
   }
 
   // --- Groupe 3 : Administration (selon permissions) ---
@@ -76,6 +79,9 @@ function buildNavbar(activeKey) {
     }
     if (CURRENT_USER.permissions.peut_gerer_actus) {
       adminLinks += linkHtml('admin-actus.html', 'Communiqués', 'admin-actus');
+    }
+    if (CURRENT_USER.permissions.peut_gerer_judiciaire) {
+      adminLinks += linkHtml('admin-judiciaire.html', 'Rôles judiciaires', 'admin-judiciaire');
     }
   }
 

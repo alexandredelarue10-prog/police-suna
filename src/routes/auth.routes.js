@@ -15,6 +15,7 @@ async function buildSessionUser(userRow) {
     peut_gerer_protocoles: false,
     peut_configurer_planning: false,
     peut_gerer_id_discord: false,
+    peut_gerer_judiciaire: false,
   };
   let gradeNom = null;
   let gradeCouleur = null;
@@ -40,6 +41,7 @@ async function buildSessionUser(userRow) {
         peut_gerer_protocoles: g.peut_gerer_protocoles,
         peut_configurer_planning: g.peut_configurer_planning,
         peut_gerer_id_discord: g.peut_gerer_id_discord,
+        peut_gerer_judiciaire: g.peut_gerer_judiciaire,
       };
     }
   }

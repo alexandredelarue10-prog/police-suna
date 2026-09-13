@@ -68,6 +68,9 @@
           <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400">
             <input type="checkbox" id="p-discord" style="width:auto"> Renseigner l'ID Discord des comptes (notifications par DM)
           </label>
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; margin-top:6px">
+            <input type="checkbox" id="p-judiciaire" style="width:auto"> Gérer le système judiciaire (rôles + attribution)
+          </label>
         </div>
         <div class="field">
           <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:400; color:var(--sceau-600)">
@@ -153,6 +156,7 @@
       if (g.peut_gerer_protocoles) perms.push('Protocoles');
       if (g.peut_configurer_planning) perms.push('Planning auto');
       if (g.peut_gerer_id_discord) perms.push('ID Discord');
+      if (g.peut_gerer_judiciaire) perms.push('Judiciaire');
       return perms.length ? perms.join(', ') : 'Aucune permission spéciale';
     }
 
@@ -173,6 +177,7 @@
         document.getElementById('p-protocoles').checked = grade.peut_gerer_protocoles;
         document.getElementById('p-planning').checked = grade.peut_configurer_planning;
         document.getElementById('p-discord').checked = grade.peut_gerer_id_discord;
+        document.getElementById('p-judiciaire').checked = grade.peut_gerer_judiciaire;
         document.getElementById('p-reserve').checked = grade.reserve;
       } else {
         document.getElementById('modal-title').textContent = 'Nouveau grade';
@@ -196,6 +201,7 @@
         peut_gerer_protocoles: document.getElementById('p-protocoles').checked,
         peut_configurer_planning: document.getElementById('p-planning').checked,
         peut_gerer_id_discord: document.getElementById('p-discord').checked,
+        peut_gerer_judiciaire: document.getElementById('p-judiciaire').checked,
         reserve: document.getElementById('p-reserve').checked,
       };
       try {

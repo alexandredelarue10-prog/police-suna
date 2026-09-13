@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rôles judiciaires — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Rôles judiciaires</h1>
+          <p class="muted">Avocat, Procureur, Juge… Titre attribué à un compte au sein du pôle Judiciaire.</p>
+        </div>
+        <button class="btn btn-primary" id="new-role-btn">+ Nouveau rôle</button>
+      </div>
+
+      <div id="roles-list"><div class="loader">Chargement…</div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="role-modal">
+    <div class="modal">
+      <h3 id="modal-title">Nouveau rôle</h3>
+      <form id="role-form">
+        <input type="hidden" id="r-id" />
+        <div class="field-row">
+          <div class="field">
+            <label for="r-nom">Nom du rôle *</label>
+            <input type="text" id="r-nom" required />
+          </div>
+          <div class="field">
+            <label for="r-niveau">Niveau hiérarchique</label>
+            <input type="number" id="r-niveau" value="0" />
+            <div class="field-hint">Plus le nombre est élevé, plus le rôle est avancé (ex : Juge > Procureur > Avocat).</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="r-couleur">Couleur du badge</label>
+          <input type="color" id="r-couleur" value="#3E5C6B" style="height:42px; padding:4px" />
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async function () {
+      const user = await initLayout({ activeKey: 'admin-judiciaire', requireAuth: true, requirePerm: 'peut_gerer_judiciaire' });
+      if (!user) return;
+      loadRoles();
+      document.getElementById('new-role-btn').addEventListener('click', () => openModal());
+      document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('role-modal').classList.remove('open'));
+      document.getElementById('role-form').addEventListener('submit', saveRole);
+    })();
+
+    let rolesCache = [];
+
+    async function loadRoles() {
+      const container = document.getElementById('roles-list');
+      try {
+        const { roles } = await api('/roles-judiciaires');
+        rolesCache = roles;
+        if (roles.length === 0) {
+          container.innerHTML = '<div class="empty-state">Aucun rôle judiciaire défini.</div>';
+          return;
+        }
+        container.innerHTML = roles.map(r => `
+          <div class="card" style="margin-bottom:12px">
+            <div class="flex-between" style="flex-wrap:wrap; gap:12px">
+              <div class="flex gap-12" style="align-items:center">
+                <span class="grade-dot" style="background:${r.couleur}; width:16px; height:16px"></span>
+                <div>
+                  <strong>${escapeHtml(r.nom)}</strong>
+                  <p class="muted mb-0" style="font-size:0.8rem">Niveau ${r.niveau}</p>
+                </div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-secondary btn-sm" data-edit="${r.id}">Modifier</button>
+                <button class="btn btn-danger btn-sm" data-delete="${r.id}">Supprimer</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => openModal(rolesCache.find(r => r.id == btn.dataset.edit)));
+        });
+        container.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer ce rôle ? Les membres concernés repasseront "sans rôle".')) return;
+            try {
+              await api(`/roles-judiciaires/${btn.dataset.delete}`, { method: 'DELETE' });
+              toast('Rôle supprimé.');
+              loadRoles();
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function openModal(role = null) {
+      document.getElementById('role-form').reset();
+      document.getElementById('r-couleur').value = '#3E5C6B';
+      if (role) {
+        document.getElementById('modal-title').textContent = 'Modifier le rôle';
+        document.getElementById('r-id').value = role.id;
+        document.getElementById('r-nom').value = role.nom;
+        document.getElementById('r-niveau').value = role.niveau;
+        document.getElementById('r-couleur').value = role.couleur;
+      } else {
+        document.getElementById('modal-title').textContent = 'Nouveau rôle';
+        document.getElementById('r-id').value = '';
+      }
+      document.getElementById('role-modal').classList.add('open');
+    }
+
+    async function saveRole(e) {
+      e.preventDefault();
+      const id = document.getElementById('r-id').value;
+      const payload = {
+        nom: document.getElementById('r-nom').value.trim(),
+        niveau: parseInt(document.getElementById('r-niveau').value) || 0,
+        couleur: document.getElementById('r-couleur').value,
+      };
+      try {
+        if (id) {
+          await api(`/roles-judiciaires/${id}`, { method: 'PUT', body: payload });
+          toast('Rôle mis à jour.');
+        } else {
+          await api('/roles-judiciaires', { method: 'POST', body: payload });
+          toast('Rôle créé.');
+        }
+        document.getElementById('role-modal').classList.remove('open');
+        loadRoles();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

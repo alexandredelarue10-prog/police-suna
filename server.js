@@ -30,6 +30,8 @@ const enquetesRoutes = require('./src/routes/enquetes.routes');
 const securiteRoutes = require('./src/routes/securite.routes');
 const interneRoutes = require('./src/routes/interne.routes');
 const messagesRoutes = require('./src/routes/messages.routes');
+const rolesJudiciairesRoutes = require('./src/routes/roles-judiciaires.routes');
+const judiciaireRoutes = require('./src/routes/judiciaire.routes');
 require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
 
 const app = express();
@@ -93,6 +95,8 @@ app.use('/api/enquetes', enquetesRoutes);
 app.use('/api/securite', securiteRoutes);
 app.use('/api/interne', interneRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/roles-judiciaires', rolesJudiciairesRoutes);
+app.use('/api/judiciaire', judiciaireRoutes);
 
 // Vérification de santé pour Railway
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

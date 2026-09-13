@@ -23,9 +23,9 @@
       <div class="table-wrap">
         <table id="users-table">
           <thead>
-            <tr><th>Utilisateur</th><th>Nom complet</th><th>Grade (poste)</th><th>Rang ninja</th><th>Pôles</th><th>Discord</th><th>Statut</th><th>Matricule</th><th></th></tr>
+            <tr><th>Utilisateur</th><th>Nom complet</th><th>Grade (poste)</th><th>Rang ninja</th><th>Pôles</th><th>Discord</th><th>Rôle judiciaire</th><th>Statut</th><th>Matricule</th><th></th></tr>
           </thead>
-          <tbody><tr><td colspan="9" class="loader">Chargement…</td></tr></tbody>
+          <tbody><tr><td colspan="10" class="loader">Chargement…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -58,16 +58,18 @@
     let gradesCache = [];
     let rangsCache = [];
     let polesCache = [];
+    let rolesJudCache = [];
     let currentUserId = null;
 
     (async function () {
       const user = await initLayout({ activeKey: 'admin-comptes', requireAuth: true, requirePerm: 'peut_valider_comptes' });
       if (!user) return;
       currentUserId = user.id;
-      const [{ grades }, { rangs }, { poles }] = await Promise.all([api('/grades'), api('/rangs'), api('/poles')]);
+      const [{ grades }, { rangs }, { poles }, { roles }] = await Promise.all([api('/grades'), api('/rangs'), api('/poles'), api('/roles-judiciaires')]);
       gradesCache = grades;
       rangsCache = rangs;
       polesCache = poles;
+      rolesJudCache = roles;
       loadUsers();
 
       document.getElementById('dossier-close').addEventListener('click', () => document.getElementById('dossier-modal').classList.remove('open'));
@@ -130,6 +132,17 @@
         <input type="text" class="discord-input" value="${escapeHtml(u.discord_id || '')}" placeholder="ID Discord" style="width:150px; font-size:0.78rem" />
         <button class="btn btn-secondary btn-sm" data-save-discord="${u.id}">OK</button>
       </div>`;
+    }
+
+    // Rôle judiciaire : select éditable uniquement si le compte connecté a la permission dédiée
+    function roleJudCellHtml(u) {
+      if (!CURRENT_USER.permissions.peut_gerer_judiciaire) {
+        return `<span class="muted" style="font-size:0.8rem">${escapeHtml(u.role_judiciaire_nom || '—')}</span>`;
+      }
+      return `<select class="role-jud-select">
+        <option value="">— Aucun —</option>
+        ${rolesJudCache.map(r => `<option value="${r.id}" ${String(r.id) === String(u.role_judiciaire_id) ? 'selected' : ''}>${escapeHtml(r.nom)}</option>`).join('')}
+      </select>`;
     }
 
     async function loadUsers() {
@@ -197,7 +210,7 @@
       const tbody = document.querySelector('#users-table tbody');
       const approved = users.filter(u => u.statut !== 'en_attente');
       if (approved.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Aucun compte.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Aucun compte.</td></tr>';
         return;
       }
       tbody.innerHTML = approved.map(u => {
@@ -216,6 +229,7 @@
                 : `<div class="pole-cell">${polesCheckboxHtml(u.poles)}<button class="btn btn-secondary btn-sm" data-save-poles="${u.id}" style="margin-top:4px">Enregistrer</button></div>`}
             </td>
             <td>${discordCellHtml(u)}</td>
+            <td>${roleJudCellHtml(u)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
             <td>${u.protege ? '' : `<div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-dossier="${u.id}" data-username="${escapeHtml(u.username)}">Dossier</button><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></div>`}</td>
@@ -251,6 +265,16 @@
             toast('Pôles mis à jour.');
             loadUsers();
           } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+      tbody.querySelectorAll('.role-jud-select').forEach((select) => {
+        const row = select.closest('tr');
+        const idx = [...tbody.children].indexOf(row);
+        select.addEventListener('change', async () => {
+          try {
+            await api(`/users/${approved[idx].id}/role-judiciaire`, { method: 'PATCH', body: { role_judiciaire_id: select.value || null } });
+            toast('Rôle judiciaire mis à jour.');
+          } catch (err) { toast(err.message, 'error'); loadUsers(); }
         });
       });
       tbody.querySelectorAll('[data-save-discord]').forEach(btn => {

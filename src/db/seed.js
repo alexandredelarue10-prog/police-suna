@@ -15,17 +15,17 @@ async function run() {
   const { rows: gradeCount } = await pool.query('SELECT COUNT(*)::int AS n FROM grades');
   if (gradeCount[0].n === 0) {
     const grades = [
-      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, configurer_planning, gerer_id_discord, reserve
-      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true,  true,  true],
-      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  true,  true,  false],
-      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false, false, false],
-      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false, false, false],
-      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false, false, false],
+      // nom, niveau, couleur, valider_comptes, gerer_grades, gerer_sanctions, gerer_casiers, gerer_actus, gerer_protocoles, configurer_planning, gerer_id_discord, gerer_judiciaire, reserve
+      ['Fondateur',              999, '#17150F', true,  true,  true,  true,  true,  true,  true,  true,  true,  true],
+      ['Dirigeant',              100, '#7A2E2E', true,  true,  true,  true,  true,  true,  true,  true,  true,  false],
+      ['Gérant',                  80, '#A0521F', true,  false, true,  true,  true,  true,  false, false, false, false],
+      ['Inspecteur confirmé',     50, '#B8922F', false, false, false, true,  false, false, false, false, false, false],
+      ['Inspecteur en test',      20, '#3E5C6B', false, false, false, false, false, false, false, false, false, false],
     ];
     for (const g of grades) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, reserve)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, peut_gerer_judiciaire, reserve)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         g
       );
     }
@@ -35,15 +35,15 @@ async function run() {
     const { rows: fondateurRows } = await pool.query("SELECT id FROM grades WHERE nom = 'Fondateur'");
     if (fondateurRows.length === 0) {
       await pool.query(
-        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, reserve)
-         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true, true, true)`
+        `INSERT INTO grades (nom, niveau, couleur, peut_valider_comptes, peut_gerer_grades, peut_gerer_sanctions, peut_gerer_casiers, peut_gerer_actus, peut_gerer_protocoles, peut_configurer_planning, peut_gerer_id_discord, peut_gerer_judiciaire, reserve)
+         VALUES ('Fondateur', 999, '#17150F', true, true, true, true, true, true, true, true, true, true)`
       );
       console.log('[seed] Grade réservé "Fondateur" ajouté (migration).');
     } else {
       // S'assure que le grade reste bien marqué comme réservé et détient toutes les permissions,
       // même après une modification manuelle ou une migration depuis un ancien schéma.
       await pool.query(
-        "UPDATE grades SET reserve = TRUE, peut_configurer_planning = TRUE, peut_gerer_id_discord = TRUE WHERE nom = 'Fondateur' AND (reserve = FALSE OR peut_configurer_planning = FALSE OR peut_gerer_id_discord = FALSE)"
+        "UPDATE grades SET reserve = TRUE, peut_configurer_planning = TRUE, peut_gerer_id_discord = TRUE, peut_gerer_judiciaire = TRUE WHERE nom = 'Fondateur' AND (reserve = FALSE OR peut_configurer_planning = FALSE OR peut_gerer_id_discord = FALSE OR peut_gerer_judiciaire = FALSE)"
       );
     }
   }
@@ -62,6 +62,20 @@ async function run() {
       await pool.query('INSERT INTO rangs_ninja (nom, niveau, couleur) VALUES ($1,$2,$3)', r);
     }
     console.log('[seed] Rangs ninja par défaut créés.');
+  }
+
+  // --- Rôles judiciaires par défaut (uniquement si la table est vide) ---
+  const { rows: roleJudCount } = await pool.query('SELECT COUNT(*)::int AS n FROM roles_judiciaires');
+  if (roleJudCount[0].n === 0) {
+    const rolesJudiciaires = [
+      ['Avocat',    10, '#4A6670'],
+      ['Procureur', 20, '#A0521F'],
+      ['Juge',      30, '#7A2E2E'],
+    ];
+    for (const r of rolesJudiciaires) {
+      await pool.query('INSERT INTO roles_judiciaires (nom, niveau, couleur) VALUES ($1,$2,$3)', r);
+    }
+    console.log('[seed] Rôles judiciaires par défaut créés.');
   }
 
   // --- Migration douce : anciens users avec rang_ninja en texte libre -> rang_id ---
@@ -286,6 +300,12 @@ async function run() {
       resume: 'Protection du village et maintien de l\'ordre',
       description: "Le pôle sécurité est en charge d'organiser les patrouilles, la surveillance des entrées et sorties du village, l'escorte lors de déplacements diplomatiques ou l'escorte de délégations étrangères.",
       couleur: '#7A2E2E',
+    },
+    {
+      nom: 'Judiciaire',
+      resume: 'Avocats, procureurs et juges — traitement des affaires',
+      description: "Le pôle judiciaire regroupe les avocats, procureurs et juges du village. Il traite les affaires judiciaires (audiences, jugements, verdicts) en lien avec les casiers et plaintes déjà enregistrés par la police.",
+      couleur: '#33495A',
     },
   ];
   for (const p of poles) {

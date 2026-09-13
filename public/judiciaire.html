@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pôle Judiciaire — Police de Sunagakure</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="page-body">
+    <div class="wrap" style="padding-top:40px">
+      <div class="section-head">
+        <div>
+          <h1 class="mb-0">Pôle Judiciaire</h1>
+          <p class="muted" style="max-width:600px">Avocats, procureurs et juges du village. Traitement des affaires en lien avec les casiers et plaintes existants.</p>
+        </div>
+      </div>
+
+      <section>
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.15rem">Annuaire</h2>
+        </div>
+        <div id="annuaire-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
+      </section>
+
+      <section style="padding-top:12px">
+        <div class="section-head">
+          <h2 class="mb-0" style="font-size:1.15rem">Affaires judiciaires</h2>
+          <button class="btn btn-primary" id="new-btn">+ Nouvelle affaire</button>
+        </div>
+        <div id="affaires-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="new-modal">
+    <div class="modal">
+      <h3>Nouvelle affaire judiciaire</h3>
+      <form id="new-form">
+        <div class="field">
+          <label for="a-titre">Titre *</label>
+          <input type="text" id="a-titre" required />
+        </div>
+        <div class="field">
+          <label for="a-description">Description</label>
+          <textarea id="a-description" rows="3"></textarea>
+        </div>
+        <div class="modal-close-row">
+          <button type="button" class="btn btn-secondary" id="new-cancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ouvrir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const statutLabels = {
+      ouverte: ['Ouverte', 'badge-warn'],
+      audience_programmee: ['Audience programmée', 'badge-danger'],
+      jugee: ['Jugée', 'badge-ok'],
+      classee: ['Classée', 'badge-muted'],
+    };
+
+    (async function () {
+      const user = await initLayout({ activeKey: 'judiciaire', requireAuth: true });
+      if (!user || !user.poles.includes('Judiciaire')) { window.location.href = 'dashboard.html'; return; }
+      document.getElementById('new-btn').addEventListener('click', () => document.getElementById('new-modal').classList.add('open'));
+      document.getElementById('new-cancel').addEventListener('click', () => document.getElementById('new-modal').classList.remove('open'));
+      document.getElementById('new-form').addEventListener('submit', createAffaire);
+      loadAnnuaire();
+      loadAffaires();
+    })();
+
+    async function loadAnnuaire() {
+      const grid = document.getElementById('annuaire-grid');
+      try {
+        const { membres } = await api('/judiciaire/annuaire');
+        if (membres.length === 0) {
+          grid.innerHTML = '<div class="empty-state">Aucun membre dans ce pôle pour l\'instant.</div>';
+          return;
+        }
+        grid.innerHTML = membres.map(m => `
+          <div class="card">
+            <strong>${escapeHtml(m.nom_complet || m.username)}</strong>
+            <p class="muted mb-0" style="font-size:0.8rem">@${escapeHtml(m.username)}${m.matricule ? ' · ' + escapeHtml(m.matricule) : ''}</p>
+            <div class="flex gap-8" style="margin-top:10px; flex-wrap:wrap">
+              ${m.role_judiciaire_nom ? `<span class="grade-chip"><span class="grade-dot" style="background:${m.role_judiciaire_couleur}"></span>${escapeHtml(m.role_judiciaire_nom)}</span>` : '<span class="muted" style="font-size:0.8rem">Rôle non attribué</span>'}
+              ${m.grade_nom ? `<span class="badge badge-muted">${escapeHtml(m.grade_nom)}</span>` : ''}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function loadAffaires() {
+      const grid = document.getElementById('affaires-grid');
+      try {
+        const { affaires } = await api('/judiciaire');
+        if (affaires.length === 0) {
+          grid.innerHTML = '<div class="empty-state">Aucune affaire ouverte.</div>';
+          return;
+        }
+        grid.innerHTML = affaires.map(a => {
+          const [label, cls] = statutLabels[a.statut] || ['Inconnu', 'badge-muted'];
+          return `
+            <a href="affaire-detail.html?id=${a.id}" class="dossier" data-tab="${escapeHtml(a.numero)}">
+              <span class="badge ${cls}">${label}</span>
+              <h3>${escapeHtml(a.titre)}</h3>
+              <div class="meta">Avocat : ${escapeHtml(a.avocat_username || '—')} · Procureur : ${escapeHtml(a.procureur_username || '—')} · Juge : ${escapeHtml(a.juge_username || '—')}</div>
+              <div class="meta" style="margin-top:6px">
+                ${a.nb_casiers > 0 ? `<span class="badge badge-muted">${a.nb_casiers} casier(s)</span> ` : ''}
+                ${a.nb_plaintes > 0 ? `<span class="badge badge-muted">${a.nb_plaintes} plainte(s)</span>` : ''}
+              </div>
+            </a>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function createAffaire(e) {
+      e.preventDefault();
+      try {
+        const { affaire } = await api('/judiciaire', {
+          method: 'POST',
+          body: { titre: document.getElementById('a-titre').value.trim(), description: document.getElementById('a-description').value.trim() },
+        });
+        window.location.href = `affaire-detail.html?id=${affaire.id}`;
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

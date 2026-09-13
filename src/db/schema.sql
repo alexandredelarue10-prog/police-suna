@@ -16,12 +16,14 @@ CREATE TABLE IF NOT EXISTS grades (
   peut_gerer_protocoles BOOLEAN NOT NULL DEFAULT FALSE, -- codes d'alerte
   peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE, -- automatisation du planning
   peut_gerer_id_discord BOOLEAN NOT NULL DEFAULT FALSE, -- renseigner l'ID Discord d'un compte (notifications par DM)
+  peut_gerer_judiciaire BOOLEAN NOT NULL DEFAULT FALSE, -- gérer les rôles judiciaires (types + attribution aux comptes)
   reserve BOOLEAN NOT NULL DEFAULT FALSE, -- grade exclusif : ne peut être attribué à personne via l'interface
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS reserve BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_configurer_planning BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_gerer_id_discord BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS peut_gerer_judiciaire BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- RANGS NINJA (Genin, Chûnin, Kakunin, TKJ, Jônin...) : entièrement modifiables via l'interface admin
 -- Distinct du "grade" (poste au sein de la police) : c'est une étiquette purement informative.
@@ -386,6 +388,54 @@ CREATE TABLE IF NOT EXISTS enquete_pieces (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_enquete_pieces_enquete ON enquete_pieces(enquete_id);
+
+-- PÔLE JUDICIAIRE : rôles (Avocat, Procureur, Juge...), librement gérables comme les rangs ninja
+CREATE TABLE IF NOT EXISTS roles_judiciaires (
+  id SERIAL PRIMARY KEY,
+  nom VARCHAR(60) NOT NULL UNIQUE,
+  niveau INTEGER NOT NULL DEFAULT 0,
+  couleur VARCHAR(7) NOT NULL DEFAULT '#3E5C6B',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role_judiciaire_id INTEGER REFERENCES roles_judiciaires(id) ON DELETE SET NULL;
+
+-- PÔLE JUDICIAIRE : affaires (audiences, jugements, verdicts), reliées aux casiers/plaintes existants
+CREATE TABLE IF NOT EXISTS affaires_judiciaires (
+  id SERIAL PRIMARY KEY,
+  numero VARCHAR(20) UNIQUE,
+  titre VARCHAR(150) NOT NULL,
+  description TEXT DEFAULT '',
+  statut VARCHAR(30) NOT NULL DEFAULT 'ouverte', -- ouverte | audience_programmee | jugee | classee
+  avocat_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  procureur_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  juge_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  date_audience TIMESTAMPTZ,
+  verdict TEXT DEFAULT '',
+  peine VARCHAR(200) DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE SEQUENCE IF NOT EXISTS affaire_numero_seq START 1;
+CREATE TABLE IF NOT EXISTS affaire_casiers (
+  affaire_id INTEGER NOT NULL REFERENCES affaires_judiciaires(id) ON DELETE CASCADE,
+  casier_id INTEGER NOT NULL REFERENCES casiers(id) ON DELETE CASCADE,
+  PRIMARY KEY (affaire_id, casier_id)
+);
+CREATE TABLE IF NOT EXISTS affaire_plaintes (
+  affaire_id INTEGER NOT NULL REFERENCES affaires_judiciaires(id) ON DELETE CASCADE,
+  plainte_id INTEGER NOT NULL REFERENCES plaintes(id) ON DELETE CASCADE,
+  PRIMARY KEY (affaire_id, plainte_id)
+);
+CREATE TABLE IF NOT EXISTS affaire_evenements (
+  id SERIAL PRIMARY KEY,
+  affaire_id INTEGER NOT NULL REFERENCES affaires_judiciaires(id) ON DELETE CASCADE,
+  date_evenement DATE,
+  description TEXT NOT NULL,
+  cree_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_affaire_evenements_affaire ON affaire_evenements(affaire_id);
 
 -- PÔLE SÉCURITÉ : registre des entrées et sorties du village
 CREATE TABLE IF NOT EXISTS entrees_sorties (
