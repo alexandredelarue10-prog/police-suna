@@ -341,6 +341,7 @@
                 ${mandatsActifs.length ? `<span class="badge badge-danger">⚠ ${mandatsActifs.length} mandat(s) actif(s)</span>` : ''}
                 <h1 style="margin-top:10px">${escapeHtml(casier.nom)} ${escapeHtml(casier.prenom || '')}</h1>
                 ${casier.surnom ? `<p class="muted mb-0">dit "${escapeHtml(casier.surnom)}"</p>` : ''}
+                <p class="muted mb-0" style="font-size:0.78rem; margin-top:4px">Créé par ${escapeHtml(casier.createur_username || '—')} le ${formatDate(casier.created_at)}</p>
               </div>
               ${canManage ? `<div class="flex gap-8">
                 <a href="/api/casiers/${casier.id}/pdf" class="btn btn-secondary btn-sm">Télécharger (PDF)</a>

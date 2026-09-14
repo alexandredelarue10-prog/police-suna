@@ -27,9 +27,10 @@ router.get('/', requireAuth, async (req, res) => {
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT c.*, COALESCE(ci.n, 0)::int AS nb_infractions
+      `SELECT c.*, COALESCE(ci.n, 0)::int AS nb_infractions, u.username AS createur_username
        FROM casiers c
        LEFT JOIN (SELECT casier_id, COUNT(*) AS n FROM casier_infractions GROUP BY casier_id) ci ON ci.casier_id = c.id
+       LEFT JOIN users u ON u.id = c.cree_par
        ${where} ORDER BY c.updated_at DESC LIMIT $${i}`,
       params
     );
@@ -57,7 +58,10 @@ router.get('/recherches', async (req, res) => {
 // GET /api/casiers/:id — détail + infractions liées
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const { rows: casierRows } = await pool.query('SELECT * FROM casiers WHERE id = $1', [req.params.id]);
+    const { rows: casierRows } = await pool.query(
+      `SELECT c.*, u.username AS createur_username FROM casiers c LEFT JOIN users u ON u.id = c.cree_par WHERE c.id = $1`,
+      [req.params.id]
+    );
     if (casierRows.length === 0) return res.status(404).json({ error: 'Casier introuvable.' });
 
     const { rows: infractions } = await pool.query(

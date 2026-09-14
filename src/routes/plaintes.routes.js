@@ -41,10 +41,10 @@ router.get('/', requireAuth, async (req, res) => {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(
-      `SELECT p.*,
+      `SELECT p.*, u.username AS agent_username,
               (SELECT COUNT(*)::int FROM plainte_temoignages t WHERE t.plainte_id = p.id) AS nb_temoignages,
               (SELECT COUNT(*)::int FROM plainte_infractions pi WHERE pi.plainte_id = p.id) AS nb_infractions
-       FROM plaintes p ${where} ORDER BY p.updated_at DESC LIMIT 100`,
+       FROM plaintes p LEFT JOIN users u ON u.id = p.agent_id ${where} ORDER BY p.updated_at DESC LIMIT 100`,
       params
     );
     res.json({ plaintes: rows });

@@ -58,6 +58,7 @@
       container.innerHTML = `
         <div class="card dark-form">
           <h1 style="margin-top:0">${plainte ? escapeHtml(plainte.numero || 'Plainte') : 'Nouvelle plainte'}</h1>
+          ${plainte ? `<p class="muted mb-0" style="font-size:0.78rem; margin-bottom:16px">Créée par ${escapeHtml(plainte.agent_username || '—')} le ${formatDate(plainte.created_at)}</p>` : ''}
           <form id="plainte-form">
             ${!canManage ? '<div class="alert alert-info">Lecture seule : seul le créateur ou un Gérant et plus peut modifier cette plainte.</div>' : ''}
             <div class="field-row">
