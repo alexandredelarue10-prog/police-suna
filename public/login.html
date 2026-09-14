@@ -8,7 +8,7 @@
 </head>
 <body>
   <div class="center-page">
-    <div class="doc-card" style="max-width:400px; width:100%;">
+    <div class="doc-card" style="max-width:400px; width:100%;" id="login-card">
       <div class="text-center" style="margin-bottom:20px">
         <div class="sceau" style="margin:0 auto 12px"></div>
         <h2 class="mb-0">Connexion</h2>
@@ -29,7 +29,7 @@
         <button type="submit" class="btn btn-primary btn-block" id="submit-btn">Se connecter</button>
       </form>
 
-      <p class="text-center" style="margin-top:18px; font-size:0.85rem">
+      <p class="text-center" style="margin-top:18px; font-size:0.85rem" id="register-hint">
         Pas encore de compte ? <a href="register.html">Demander un accès</a>
       </p>
     </div>
@@ -62,11 +62,28 @@
         });
         window.location.href = 'dashboard.html';
       } catch (err) {
+        if (err.message === 'Le parchemin ne reçoit plus le chakra de son propriétaire.') {
+          showChakraLockout();
+          return;
+        }
         errorBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
         submitBtn.disabled = false;
         submitBtn.textContent = 'Se connecter';
       }
     });
+
+    // Message RP en grand format, remplace tout le formulaire — pas une simple petite alerte,
+    // pour marquer le coup quand le chakra du village est coupé.
+    function showChakraLockout() {
+      document.getElementById('login-card').innerHTML = `
+        <div class="text-center" style="padding:16px 4px">
+          <div style="font-size:3.2rem; line-height:1; margin-bottom:6px">⚡</div>
+          <h1 style="font-size:1.5rem; color:var(--sceau-600); margin-bottom:14px">Le chakra a été coupé</h1>
+          <p style="font-size:1.05rem; line-height:1.5">Le parchemin ne reçoit plus le chakra de son propriétaire.</p>
+          <p class="muted" style="margin-top:18px; font-size:0.85rem">Le village est verrouillé par le Fondateur. Réessaie plus tard.</p>
+        </div>
+      `;
+    }
   </script>
 </body>
 </html>
