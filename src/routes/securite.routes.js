@@ -2,8 +2,26 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePole } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
+const { notifierUser } = require('../utils/discordNotifier');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
+
+// GET /api/securite/agents — comptes approuvés, pour assigner des agents à une escorte
+// (accessible à tout le pôle Sécurité, contrairement à /api/users réservé aux hauts gradés :
+// sans cette route, un agent sans permission d'administration ne pouvait pas charger la
+// liste et donc jamais assigner personne à une escorte).
+router.get('/agents', requireAuth, requirePole('Sécurité'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.username, u.nom_complet FROM users u WHERE u.statut = 'approuve' ORDER BY u.username`
+    );
+    res.json({ agents: rows });
+  } catch (err) {
+    console.error('[securite/agents]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
 
 router.get('/incidents', requireAuth, requirePole('Sécurité'), async (req, res) => {
   try {
@@ -50,6 +68,7 @@ router.put('/incidents/:id', requireAuth, requirePole('Sécurité'), async (req,
       [titre, description || '', niveau_gravite || 1, lieu || '', date_incident || null, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Incident introuvable.' });
+    broadcast('securite', { action: 'incident_modifie', details: rows[0].titre });
     res.json({ incident: rows[0] });
   } catch (err) {
     console.error('[securite/incidents/update]', err);
@@ -92,6 +111,7 @@ router.post('/entrees-sorties', requireAuth, requirePole('Sécurité'), async (r
        VALUES ($1,$2,$3,COALESCE($4, now()),$5) RETURNING *`,
       [nom_personne, type === 'sortie' ? 'sortie' : 'entree', motif || '', date_passage || null, req.session.user.id]
     );
+    broadcast('securite', { action: 'mouvement_enregistre', details: nom_personne });
     res.status(201).json({ mouvement: rows[0] });
   } catch (err) {
     console.error('[securite/entrees-sorties/create]', err);
@@ -103,6 +123,7 @@ router.delete('/entrees-sorties/:id', requireAuth, requirePole('Sécurité'), as
   try {
     const { rows } = await pool.query('DELETE FROM entrees_sorties WHERE id = $1 RETURNING id', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Mouvement introuvable.' });
+    broadcast('securite', { action: 'mouvement_supprime' });
     res.json({ message: 'Mouvement supprimé.' });
   } catch (err) {
     console.error('[securite/entrees-sorties/delete]', err);
@@ -141,6 +162,8 @@ router.post('/escortes', requireAuth, requirePole('Sécurité'), async (req, res
     if (Array.isArray(agent_ids)) {
       for (const uid of agent_ids) {
         await pool.query('INSERT INTO escorte_agents (escorte_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rows[0].id, uid]);
+        notifierUser(uid, `🛂 Tu as été assigné à l'escorte "${titre}"${destination ? ' vers ' + destination : ''}.`)
+          .catch((err) => console.error('[discord] notif escorte_assignee', err.message));
       }
     }
 
@@ -165,11 +188,19 @@ router.put('/escortes/:id', requireAuth, requirePole('Sécurité'), async (req, 
     if (rows.length === 0) return res.status(404).json({ error: 'Escorte introuvable.' });
 
     if (Array.isArray(agent_ids)) {
+      const { rows: beforeAgents } = await pool.query('SELECT user_id FROM escorte_agents WHERE escorte_id = $1', [req.params.id]);
+      const beforeIds = beforeAgents.map(a => String(a.user_id));
+
       await pool.query('DELETE FROM escorte_agents WHERE escorte_id = $1', [req.params.id]);
       for (const uid of agent_ids) {
         await pool.query('INSERT INTO escorte_agents (escorte_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, uid]);
+        if (!beforeIds.includes(String(uid))) {
+          notifierUser(uid, `🛂 Tu as été assigné à l'escorte "${titre}"${destination ? ' vers ' + destination : ''}.`)
+            .catch((err) => console.error('[discord] notif escorte_assignee', err.message));
+        }
       }
     }
+    broadcast('securite', { action: 'escorte_modifiee', details: titre });
     res.json({ escorte: rows[0] });
   } catch (err) {
     console.error('[securite/escortes/update]', err);
@@ -181,6 +212,7 @@ router.delete('/escortes/:id', requireAuth, requirePole('Sécurité'), async (re
   try {
     const { rows } = await pool.query('DELETE FROM escortes WHERE id = $1 RETURNING titre', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Escorte introuvable.' });
+    broadcast('securite', { action: 'escorte_supprimee', details: rows[0].titre });
     res.json({ message: `Escorte "${rows[0].titre}" supprimée.` });
   } catch (err) {
     console.error('[securite/escortes/delete]', err);
@@ -207,6 +239,7 @@ router.post('/zones', requireAuth, requirePole('Sécurité'), async (req, res) =
       'INSERT INTO zones_securite (nom, niveau, description) VALUES ($1,$2,$3) RETURNING *',
       [nom, niveau || 1, description || '']
     );
+    broadcast('securite', { action: 'zone_ajoutee', details: nom });
     res.status(201).json({ zone: rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Une zone avec ce nom existe déjà.' });
@@ -223,6 +256,7 @@ router.put('/zones/:id', requireAuth, requirePole('Sécurité'), async (req, res
       [nom, niveau || 1, description || '', req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Zone introuvable.' });
+    broadcast('securite', { action: 'zone_modifiee', details: rows[0].nom });
     res.json({ zone: rows[0] });
   } catch (err) {
     console.error('[securite/zones/update]', err);
@@ -234,6 +268,7 @@ router.delete('/zones/:id', requireAuth, requirePole('Sécurité'), async (req, 
   try {
     const { rows } = await pool.query('DELETE FROM zones_securite WHERE id = $1 RETURNING nom', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Zone introuvable.' });
+    broadcast('securite', { action: 'zone_supprimee', details: rows[0].nom });
     res.json({ message: `Zone "${rows[0].nom}" supprimée.` });
   } catch (err) {
     console.error('[securite/zones/delete]', err);

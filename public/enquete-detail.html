@@ -18,6 +18,7 @@
   <script src="js/common.js"></script>
   <script>
     let enqueteId;
+    let membresCache = [];
     const statutOptions = [['ouverte', 'Ouverte'], ['en_cours', 'En cours'], ['cloturee', 'Clôturée']];
 
     (async function () {
@@ -25,6 +26,7 @@
       if (!user || !user.poles.includes('Enquête')) { window.location.href = 'dashboard.html'; return; }
       enqueteId = new URLSearchParams(window.location.search).get('id');
       if (!enqueteId) { window.location.href = 'enquetes.html'; return; }
+      try { membresCache = (await api('/enquetes/membres')).membres; } catch (_) { /* silencieux */ }
       loadDetail();
     })();
 
@@ -53,6 +55,13 @@
             <div class="field">
               <label for="e-statut">Statut</label>
               <select id="e-statut">${statutOptions.map(([v, l]) => `<option value="${v}" ${v === enquete.statut ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            </div>
+            <div class="field">
+              <label for="e-enqueteur">Enquêteur assigné</label>
+              <select id="e-enqueteur">
+                <option value="">— Non désigné —</option>
+                ${membresCache.map(m => `<option value="${m.id}" ${String(m.id) === String(enquete.enqueteur_id) ? 'selected' : ''}>${escapeHtml(m.nom_complet || m.username)}${m.grade_nom ? ' (' + escapeHtml(m.grade_nom) + ')' : ''}</option>`).join('')}
+              </select>
             </div>
             <button type="submit" class="btn btn-primary">Enregistrer</button>
             <button type="button" class="btn btn-danger" id="delete-btn" style="margin-left:8px">Supprimer le dossier</button>
@@ -192,6 +201,7 @@
             titre: document.getElementById('e-titre').value.trim(),
             description: document.getElementById('e-description').value.trim(),
             statut: document.getElementById('e-statut').value,
+            enqueteur_id: document.getElementById('e-enqueteur').value || null,
           },
         });
         toast('Dossier mis à jour.');

@@ -52,6 +52,7 @@
       document.getElementById('new-cancel').addEventListener('click', () => document.getElementById('new-modal').classList.remove('open'));
       document.getElementById('new-form').addEventListener('submit', createEnquete);
       loadEnquetes();
+      onLive(['enquetes'], loadEnquetes);
     })();
 
     async function loadEnquetes() {

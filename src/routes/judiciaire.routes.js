@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { requireAuth, requirePole } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
 const { notifierUser } = require('../utils/discordNotifier');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
 
@@ -139,6 +140,7 @@ router.put('/:id', requireAuth, requirePole('Judiciaire'), async (req, res) => {
       notifierUser(juge_id, apercu).catch((err) => console.error('[discord] notif affaire (juge)', err.message));
     }
 
+    broadcast('judiciaire', { action: 'affaire_modifiee', details: `${rows[0].numero} — ${rows[0].titre}` });
     res.json({ affaire: rows[0] });
   } catch (err) {
     console.error('[judiciaire/update]', err);
@@ -150,6 +152,7 @@ router.delete('/:id', requireAuth, requirePole('Judiciaire'), async (req, res) =
   try {
     const { rows } = await pool.query('DELETE FROM affaires_judiciaires WHERE id = $1 RETURNING numero', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Affaire introuvable.' });
+    broadcast('judiciaire', { action: 'affaire_supprimee', details: rows[0].numero });
     res.json({ message: `Affaire ${rows[0].numero} supprimée.` });
   } catch (err) {
     console.error('[judiciaire/delete]', err);

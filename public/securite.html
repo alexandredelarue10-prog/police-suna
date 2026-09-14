@@ -141,14 +141,16 @@
       if (!user || !user.poles.includes('Sécurité')) { window.location.href = 'dashboard.html'; return; }
 
       try {
-        const { users } = await api('/users');
-        usersCache = users.filter(u => u.statut === 'approuve');
+        const { agents } = await api('/securite/agents');
+        usersCache = agents;
         document.getElementById('es-agents').innerHTML = usersCache.map(u => `
           <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-weight:400; font-size:0.85rem; padding:3px 0">
             <input type="checkbox" class="es-agent-check" value="${u.id}" style="width:auto" /> ${escapeHtml(u.nom_complet || u.username)}
           </label>
         `).join('');
       } catch (_) { /* silencieux */ }
+
+      onLive(['securite'], () => { loadIncidents(); loadMouvements(); loadEscortes(); loadZones(); });
 
       [['incidents', loadIncidents], ['mouvements', loadMouvements], ['escortes', loadEscortes], ['zones', loadZones]].forEach(([key, loader]) => {
         document.getElementById(`tab-${key}-btn`).addEventListener('click', () => switchTab(key, loader));

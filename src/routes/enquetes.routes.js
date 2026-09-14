@@ -2,8 +2,30 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requirePole } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
+const { notifierUser } = require('../utils/discordNotifier');
+const { broadcast } = require('../utils/liveSync');
 
 const router = express.Router();
+
+// GET /api/enquetes/membres — membres du pôle Enquête, pour le choix de l'enquêteur assigné
+// (accessible à tout le pôle, contrairement à /api/users réservé aux hauts gradés).
+router.get('/membres', requireAuth, requirePole('Enquête'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.username, u.nom_complet, g.nom AS grade_nom
+       FROM users u
+       JOIN user_poles up ON up.user_id = u.id
+       JOIN poles p ON p.id = up.pole_id AND p.nom = 'Enquête'
+       LEFT JOIN grades g ON g.id = u.grade_id
+       WHERE u.statut = 'approuve'
+       ORDER BY u.username`
+    );
+    res.json({ membres: rows });
+  } catch (err) {
+    console.error('[enquetes/membres]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
 
 router.get('/', requireAuth, requirePole('Enquête'), async (req, res) => {
   try {
@@ -81,14 +103,23 @@ router.post('/', requireAuth, requirePole('Enquête'), async (req, res) => {
 
 router.put('/:id', requireAuth, requirePole('Enquête'), async (req, res) => {
   try {
-    const { titre, description, statut } = req.body;
+    const { titre, description, statut, enqueteur_id } = req.body;
     if (!titre) return res.status(400).json({ error: 'Le titre est requis.' });
 
+    const { rows: beforeRows } = await pool.query('SELECT enqueteur_id FROM enquetes WHERE id = $1', [req.params.id]);
+    if (beforeRows.length === 0) return res.status(404).json({ error: 'Dossier introuvable.' });
+
     const { rows } = await pool.query(
-      `UPDATE enquetes SET titre=$1, description=$2, statut=$3, updated_at=now() WHERE id=$4 RETURNING *`,
-      [titre, description || '', statut || 'ouverte', req.params.id]
+      `UPDATE enquetes SET titre=$1, description=$2, statut=$3, enqueteur_id=$4, updated_at=now() WHERE id=$5 RETURNING *`,
+      [titre, description || '', statut || 'ouverte', enqueteur_id || null, req.params.id]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Dossier introuvable.' });
+
+    if (enqueteur_id && String(enqueteur_id) !== String(beforeRows[0].enqueteur_id)) {
+      notifierUser(enqueteur_id, `🔍 Tu as été assigné comme enquêteur sur le dossier ${rows[0].numero} — ${rows[0].titre}.`)
+        .catch((err) => console.error('[discord] notif enquete (enqueteur)', err.message));
+    }
+
+    broadcast('enquetes', { action: 'enquete_modifiee', details: `${rows[0].numero} — ${rows[0].titre}` });
     res.json({ enquete: rows[0] });
   } catch (err) {
     console.error('[enquetes/update]', err);
@@ -100,6 +131,7 @@ router.delete('/:id', requireAuth, requirePole('Enquête'), async (req, res) => 
   try {
     const { rows } = await pool.query('DELETE FROM enquetes WHERE id = $1 RETURNING numero', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Dossier introuvable.' });
+    broadcast('enquetes', { action: 'enquete_supprimee', details: rows[0].numero });
     res.json({ message: `Dossier ${rows[0].numero} supprimé.` });
   } catch (err) {
     console.error('[enquetes/delete]', err);
