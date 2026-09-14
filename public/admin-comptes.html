@@ -12,6 +12,12 @@
       <h1>Gestion des comptes</h1>
       <p class="muted" style="margin-bottom:28px">Validez les demandes d'accès, attribuez les grades, ou supprimez des comptes.</p>
 
+      <div id="fondateur-section" class="hidden card" style="margin-bottom:28px; border-color:rgba(217,192,139,0.4)">
+        <h2 class="mb-0" style="font-size:1.05rem">Sceau du Fondateur</h2>
+        <p class="muted" style="font-size:0.85rem">Coupe le chakra de tous les parchemins du village : plus personne ne peut se connecter, à l'exception du Fondateur.</p>
+        <div id="chakra-status" style="margin-top:10px"></div>
+      </div>
+
       <div class="section-head">
         <h2 class="mb-0" style="font-size:1.15rem">Demandes en attente</h2>
       </div>
@@ -68,9 +74,8 @@
       currentUserId = user.id;
       isFondateur = user.grade_nom === 'Fondateur';
       if (isFondateur) {
-        // Fonction RP réservée au Fondateur : colonne ajoutée dynamiquement, invisible pour tout autre grade.
-        document.querySelector('#users-table thead tr').insertAdjacentHTML('beforeend', '<th>Chakra</th>');
-        document.querySelectorAll('#users-table tbody td[colspan]').forEach(td => td.setAttribute('colspan', '11'));
+        document.getElementById('fondateur-section').classList.remove('hidden');
+        loadChakraStatus();
       }
       const [{ grades }, { rangs }, { poles }, { roles }] = await Promise.all([api('/grades'), api('/rangs'), api('/poles'), api('/roles-judiciaires')]);
       gradesCache = grades;
@@ -153,12 +158,25 @@
       </select>`;
     }
 
-    // Fonction RP réservée au Fondateur : coupe/rétablit le chakra du parchemin (bloque la connexion)
-    function chakraCellHtml(u) {
-      if (u.protege) return `<span class="muted" title="Compte protégé">— 🔒</span>`;
-      return u.chakra_coupe
-        ? `<span class="badge badge-danger" style="margin-right:6px">Chakra coupé</span><button class="btn btn-secondary btn-sm" data-toggle-chakra="${u.id}" data-next="false">Rétablir</button>`
-        : `<button class="btn btn-secondary btn-sm" data-toggle-chakra="${u.id}" data-next="true">Couper le chakra</button>`;
+    async function loadChakraStatus() {
+      const box = document.getElementById('chakra-status');
+      try {
+        const { coupe } = await api('/settings/chakra-village');
+        box.innerHTML = coupe
+          ? `<span class="badge badge-danger" style="margin-right:10px">Chakra du village coupé</span><button class="btn btn-secondary btn-sm" id="toggle-chakra-btn">Rétablir le chakra</button>`
+          : `<button class="btn btn-danger btn-sm" id="toggle-chakra-btn">Couper le chakra du village</button>`;
+        document.getElementById('toggle-chakra-btn').addEventListener('click', async () => {
+          const next = !coupe;
+          if (next && !confirm('Couper le chakra du village entier ? Plus personne ne pourra se connecter, sauf toi (Fondateur).')) return;
+          try {
+            await api('/settings/chakra-village', { method: 'PUT', body: { coupe: next } });
+            toast(next ? 'Chakra du village coupé.' : 'Chakra du village rétabli.');
+            loadChakraStatus();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      } catch (err) {
+        box.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
     }
 
     async function loadUsers() {
@@ -226,7 +244,7 @@
       const tbody = document.querySelector('#users-table tbody');
       const approved = users.filter(u => u.statut !== 'en_attente');
       if (approved.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${isFondateur ? 11 : 10}" class="empty-state">Aucun compte.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Aucun compte.</td></tr>';
         return;
       }
       tbody.innerHTML = approved.map(u => {
@@ -249,7 +267,6 @@
             <td><span class="badge ${cls}">${label}</span></td>
             <td style="font-family:var(--font-mono); font-size:0.8rem">${escapeHtml(u.matricule || '—')}</td>
             <td>${u.protege ? '' : `<div class="flex gap-8"><button class="btn btn-secondary btn-sm" data-dossier="${u.id}" data-username="${escapeHtml(u.username)}">Dossier</button><button class="btn btn-danger btn-sm" data-delete="${u.id}">Supprimer</button></div>`}</td>
-            ${isFondateur ? `<td>${chakraCellHtml(u)}</td>` : ''}
           </tr>`;
       }).join('');
 
@@ -302,17 +319,6 @@
           try {
             await api(`/users/${btn.dataset.saveDiscord}/discord`, { method: 'PATCH', body: { discord_id: value || null } });
             toast('ID Discord enregistré.');
-          } catch (err) { toast(err.message, 'error'); }
-        });
-      });
-      tbody.querySelectorAll('[data-toggle-chakra]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const next = btn.dataset.next === 'true';
-          if (next && !confirm('Couper le chakra de ce parchemin ? Le compte ne pourra plus se connecter tant que le chakra n\'est pas rétabli.')) return;
-          try {
-            await api(`/users/${btn.dataset.toggleChakra}/chakra`, { method: 'PATCH', body: { chakra_coupe: next } });
-            toast(next ? 'Chakra coupé.' : 'Chakra rétabli.');
-            loadUsers();
           } catch (err) { toast(err.message, 'error'); }
         });
       });

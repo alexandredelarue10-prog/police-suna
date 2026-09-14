@@ -137,11 +137,18 @@ router.post('/login', async (req, res) => {
     if (user.statut === 'refuse') {
       return res.status(403).json({ error: 'Votre demande de compte a été refusée.' });
     }
-    if (user.chakra_coupe) {
-      return res.status(403).json({ error: 'Le parchemin ne reçoit plus le chakra de son propriétaire.' });
-    }
 
     const sessionUser = await buildSessionUser(user);
+
+    // Fonction RP réservée au Fondateur : quand le chakra du village est coupé, plus personne ne
+    // peut se connecter à l'exception du Fondateur lui-même.
+    if (sessionUser.grade_nom !== 'Fondateur') {
+      const { rows: settingRows } = await pool.query("SELECT valeur FROM site_settings WHERE cle = 'chakra_village_coupe'");
+      if (settingRows[0] && settingRows[0].valeur === 'true') {
+        return res.status(403).json({ error: 'Le parchemin ne reçoit plus le chakra de son propriétaire.' });
+      }
+    }
+
     req.session.user = sessionUser;
     await pool.query('UPDATE users SET last_login = now() WHERE id = $1', [user.id]);
     res.json({ user: sessionUser });

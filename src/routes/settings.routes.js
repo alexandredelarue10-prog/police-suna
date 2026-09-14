@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../config/db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireFondateur } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
 
 const router = express.Router();
@@ -43,6 +43,41 @@ router.put('/credits', requireAuth, requireProtectedAccount, async (req, res) =>
     res.json({ message: 'Crédits mis à jour.', credits: valeur });
   } catch (err) {
     console.error('[settings/credits/put]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// Fonction RP réservée au Fondateur : coupe le chakra du village entier — plus personne ne peut
+// se connecter tant que c'est actif, à l'exception du Fondateur lui-même.
+const CHAKRA_KEY = 'chakra_village_coupe';
+
+// GET /api/settings/chakra-village — état du verrou (réservé au Fondateur, sert à afficher le bouton)
+router.get('/chakra-village', requireAuth, requireFondateur, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT valeur FROM site_settings WHERE cle = $1`, [CHAKRA_KEY]);
+    res.json({ coupe: rows[0] ? rows[0].valeur === 'true' : false });
+  } catch (err) {
+    console.error('[settings/chakra-village/get]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PUT /api/settings/chakra-village — active/désactive le verrou
+router.put('/chakra-village', requireAuth, requireFondateur, async (req, res) => {
+  try {
+    const coupe = !!req.body.coupe;
+    await pool.query(
+      `INSERT INTO site_settings (cle, valeur, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (cle) DO UPDATE SET valeur = EXCLUDED.valeur, updated_at = now()`,
+      [CHAKRA_KEY, coupe ? 'true' : 'false']
+    );
+    await logActivity(
+      req.session.user.id, req.session.user.username, 'chakra_village_modifie',
+      coupe ? 'Chakra du village coupé (verrouillage global)' : 'Chakra du village rétabli'
+    );
+    res.json({ message: coupe ? 'Le chakra du village est coupé.' : 'Le chakra du village est rétabli.', coupe });
+  } catch (err) {
+    console.error('[settings/chakra-village/put]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });
