@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
-const { requireAuth, requirePermission } = require('../middleware/auth');
+const { requireAuth, requirePermission, requireFondateur } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLog');
 const { notifierUser } = require('../utils/discordNotifier');
 
@@ -30,7 +30,7 @@ router.get('/pending-count', requireAuth, requirePermission('peut_valider_compte
 router.get('/', requireAuth, requirePermission('peut_valider_comptes'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login, u.discord_id,
+      `SELECT u.id, u.username, u.nom_complet, u.statut, u.matricule, u.created_at, u.brigade, u.protege, u.last_login, u.discord_id, u.chakra_coupe,
               g.id AS grade_id, g.nom AS grade_nom, g.couleur AS grade_couleur, g.niveau AS grade_niveau, g.reserve AS grade_reserve,
               r.id AS rang_id, r.nom AS rang_nom, r.couleur AS rang_couleur,
               rj.id AS role_judiciaire_id, rj.nom AS role_judiciaire_nom, rj.couleur AS role_judiciaire_couleur,
@@ -239,6 +239,40 @@ router.patch('/:id/role-judiciaire', requireAuth, requirePermission('peut_gerer_
     res.json({ message: `Rôle judiciaire de ${rows[0].username} mis à jour.` });
   } catch (err) {
     console.error('[users/role-judiciaire]', err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// PATCH /api/users/:id/chakra — fonction RP réservée au Fondateur : coupe/rétablit le lien de
+// chakra du parchemin, bloquant (ou débloquant) la connexion du compte concerné.
+router.patch('/:id/chakra', requireAuth, requireFondateur, async (req, res) => {
+  try {
+    const { chakra_coupe } = req.body;
+
+    const { rows: targetRows } = await pool.query('SELECT protege, username FROM users WHERE id = $1', [req.params.id]);
+    if (targetRows.length === 0) return res.status(404).json({ error: 'Compte introuvable.' });
+    if (targetRows[0].protege) {
+      return res.status(403).json({ error: 'Ce compte est protégé et ne peut pas être modifié.' });
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE users SET chakra_coupe = $1 WHERE id = $2 RETURNING id, username, chakra_coupe',
+      [!!chakra_coupe, req.params.id]
+    );
+
+    await logActivity(
+      req.session.user.id, req.session.user.username, 'chakra_coupe_modifie',
+      `${rows[0].username} : ${rows[0].chakra_coupe ? 'chakra coupé' : 'chakra rétabli'}`
+    );
+
+    if (rows[0].chakra_coupe) {
+      notifierUser(rows[0].id, `⚡ Le parchemin ne reçoit plus le chakra de son propriétaire.`)
+        .catch((err) => console.error('[discord] notif chakra_coupe', err.message));
+    }
+
+    res.json({ message: `Chakra ${rows[0].chakra_coupe ? 'coupé' : 'rétabli'} pour ${rows[0].username}.`, chakra_coupe: rows[0].chakra_coupe });
+  } catch (err) {
+    console.error('[users/chakra]', err);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 });

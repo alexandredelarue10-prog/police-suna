@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
   matricule VARCHAR(20) UNIQUE,
   protege BOOLEAN NOT NULL DEFAULT FALSE, -- compte protégé (ex: DEV) : grade/rang/suppression verrouillés
   discord_id VARCHAR(32) DEFAULT NULL, -- ID Discord (Snowflake) pour l'envoi de notifications par DM
+  chakra_coupe BOOLEAN NOT NULL DEFAULT FALSE, -- fonction RP réservée au Fondateur : bloque la connexion
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   valide_par INTEGER REFERENCES users(id) ON DELETE SET NULL,
   valide_le TIMESTAMPTZ
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS protege BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rang_id INTEGER REFERENCES rangs_ninja(id) ON DELETE SET NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(32) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS chakra_coupe BOOLEAN NOT NULL DEFAULT FALSE; -- fonction RP réservée au Fondateur : bloque la connexion
 
 -- TYPES DE SANCTIONS (code pénal) : entièrement modifiables (article, amende, cellule/TIG, gravité...)
 CREATE TABLE IF NOT EXISTS sanctions_types (

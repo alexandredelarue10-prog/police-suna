@@ -33,4 +33,16 @@ function requirePole(poleNom) {
   };
 }
 
-module.exports = { requireAuth, requirePermission, requirePole };
+// Réservé au grade "Fondateur" strictement (pas une simple permission cochable) : pour des
+// fonctions exceptionnelles qui ne doivent jamais pouvoir être déléguées, même à un Dirigeant.
+function requireFondateur(req, res, next) {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ error: 'Non authentifié.' });
+  }
+  if (req.session.user.grade_nom !== 'Fondateur') {
+    return res.status(403).json({ error: 'Réservé au Fondateur.' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requirePermission, requirePole, requireFondateur };

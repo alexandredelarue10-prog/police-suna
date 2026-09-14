@@ -38,7 +38,7 @@ function sseHandler(req, res) {
 const ACTION_DOMAINS = {
   compte_valide: 'users', compte_refuse: 'users', compte_supprime: 'users',
   grade_modifie: 'users', rang_modifie: 'users', discord_id_modifie: 'users',
-  poles_modifies: 'users', blame_applique: 'users', role_judiciaire_modifie: 'users',
+  poles_modifies: 'users', blame_applique: 'users', role_judiciaire_modifie: 'users', chakra_coupe_modifie: 'users',
   grade_cree: 'grades', grade_edite: 'grades', grade_supprime: 'grades',
   casier_cree: 'casiers', casier_supprime: 'casiers', infraction_ajoutee: 'casiers',
   plainte_deposee: 'plaintes', plainte_modifiee: 'plaintes', plainte_supprimee: 'plaintes',

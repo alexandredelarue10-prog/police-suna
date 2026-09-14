@@ -137,6 +137,9 @@ router.post('/login', async (req, res) => {
     if (user.statut === 'refuse') {
       return res.status(403).json({ error: 'Votre demande de compte a été refusée.' });
     }
+    if (user.chakra_coupe) {
+      return res.status(403).json({ error: 'Le parchemin ne reçoit plus le chakra de son propriétaire.' });
+    }
 
     const sessionUser = await buildSessionUser(user);
     req.session.user = sessionUser;
