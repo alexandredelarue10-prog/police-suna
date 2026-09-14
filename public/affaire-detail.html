@@ -35,10 +35,13 @@
       loadDetail();
     })();
 
-    function intervenantSelectHtml(idAttr, selectedId) {
+    function intervenantSelectHtml(idAttr, selectedId, roleFiltre) {
+      // Ne propose que les membres ayant ce rôle précis, plus ceux sans rôle encore attribué
+      // (pour rester utilisable même avant que l'admin ait assigné les titres).
+      const options = membresCache.filter(m => !m.role_judiciaire_nom || m.role_judiciaire_nom === roleFiltre);
       return `<select id="${idAttr}">
         <option value="">— Non désigné —</option>
-        ${membresCache.map(m => `<option value="${m.id}" ${String(m.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(m.nom_complet || m.username)}${m.role_judiciaire_nom ? ' (' + escapeHtml(m.role_judiciaire_nom) + ')' : ''}</option>`).join('')}
+        ${options.map(m => `<option value="${m.id}" ${String(m.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(m.nom_complet || m.username)}${m.role_judiciaire_nom ? ' (' + escapeHtml(m.role_judiciaire_nom) + ')' : ' (rôle non défini)'}</option>`).join('')}
       </select>`;
     }
 
@@ -71,15 +74,15 @@
             <div class="field-row">
               <div class="field">
                 <label for="a-avocat">Avocat</label>
-                ${intervenantSelectHtml('a-avocat', affaire.avocat_id)}
+                ${intervenantSelectHtml('a-avocat', affaire.avocat_id, 'Avocat')}
               </div>
               <div class="field">
                 <label for="a-procureur">Procureur</label>
-                ${intervenantSelectHtml('a-procureur', affaire.procureur_id)}
+                ${intervenantSelectHtml('a-procureur', affaire.procureur_id, 'Procureur')}
               </div>
               <div class="field">
                 <label for="a-juge">Juge</label>
-                ${intervenantSelectHtml('a-juge', affaire.juge_id)}
+                ${intervenantSelectHtml('a-juge', affaire.juge_id, 'Juge')}
               </div>
             </div>
             <div class="field">

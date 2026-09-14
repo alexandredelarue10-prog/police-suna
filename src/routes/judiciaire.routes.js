@@ -166,6 +166,7 @@ router.post('/:id/casiers', requireAuth, requirePole('Judiciaire'), async (req, 
     if (!casier_id) return res.status(400).json({ error: 'casier_id est requis.' });
     await pool.query('INSERT INTO affaire_casiers (affaire_id, casier_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, casier_id]);
     await pool.query('UPDATE affaires_judiciaires SET updated_at = now() WHERE id = $1', [req.params.id]);
+    broadcast('judiciaire', { action: 'affaire_casier_lie' });
     res.status(201).json({ message: 'Casier lié.' });
   } catch (err) {
     console.error('[judiciaire/casiers/link]', err);
@@ -176,6 +177,7 @@ router.post('/:id/casiers', requireAuth, requirePole('Judiciaire'), async (req, 
 router.delete('/:id/casiers/:casierId', requireAuth, requirePole('Judiciaire'), async (req, res) => {
   try {
     await pool.query('DELETE FROM affaire_casiers WHERE affaire_id = $1 AND casier_id = $2', [req.params.id, req.params.casierId]);
+    broadcast('judiciaire', { action: 'affaire_casier_delie' });
     res.json({ message: 'Casier délié.' });
   } catch (err) {
     console.error('[judiciaire/casiers/unlink]', err);
@@ -189,6 +191,7 @@ router.post('/:id/plaintes', requireAuth, requirePole('Judiciaire'), async (req,
     if (!plainte_id) return res.status(400).json({ error: 'plainte_id est requis.' });
     await pool.query('INSERT INTO affaire_plaintes (affaire_id, plainte_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, plainte_id]);
     await pool.query('UPDATE affaires_judiciaires SET updated_at = now() WHERE id = $1', [req.params.id]);
+    broadcast('judiciaire', { action: 'affaire_plainte_liee' });
     res.status(201).json({ message: 'Plainte liée.' });
   } catch (err) {
     console.error('[judiciaire/plaintes/link]', err);
@@ -199,6 +202,7 @@ router.post('/:id/plaintes', requireAuth, requirePole('Judiciaire'), async (req,
 router.delete('/:id/plaintes/:plainteId', requireAuth, requirePole('Judiciaire'), async (req, res) => {
   try {
     await pool.query('DELETE FROM affaire_plaintes WHERE affaire_id = $1 AND plainte_id = $2', [req.params.id, req.params.plainteId]);
+    broadcast('judiciaire', { action: 'affaire_plainte_deliee' });
     res.json({ message: 'Plainte déliée.' });
   } catch (err) {
     console.error('[judiciaire/plaintes/unlink]', err);
@@ -216,6 +220,7 @@ router.post('/:id/evenements', requireAuth, requirePole('Judiciaire'), async (re
       [req.params.id, date_evenement || null, description, req.session.user.id]
     );
     await pool.query('UPDATE affaires_judiciaires SET updated_at = now() WHERE id = $1', [req.params.id]);
+    broadcast('judiciaire', { action: 'affaire_evenement_ajoute' });
     res.status(201).json({ evenement: rows[0] });
   } catch (err) {
     console.error('[judiciaire/evenements/create]', err);
@@ -227,6 +232,7 @@ router.delete('/evenements/:evenementId', requireAuth, requirePole('Judiciaire')
   try {
     const { rows } = await pool.query('DELETE FROM affaire_evenements WHERE id = $1 RETURNING id', [req.params.evenementId]);
     if (rows.length === 0) return res.status(404).json({ error: 'Événement introuvable.' });
+    broadcast('judiciaire', { action: 'affaire_evenement_supprime' });
     res.json({ message: 'Événement supprimé.' });
   } catch (err) {
     console.error('[judiciaire/evenements/delete]', err);

@@ -28,6 +28,14 @@
           <h2 class="mb-0" style="font-size:1.15rem">Affaires judiciaires</h2>
           <button class="btn btn-primary" id="new-btn">+ Nouvelle affaire</button>
         </div>
+        <div id="affaires-stats" class="stat-row"></div>
+        <div class="flex gap-8" style="margin-bottom:18px; flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" data-filter="toutes">Toutes</button>
+          <button class="btn btn-secondary btn-sm" data-filter="ouverte">Ouvertes</button>
+          <button class="btn btn-secondary btn-sm" data-filter="audience_programmee">Audience programmée</button>
+          <button class="btn btn-secondary btn-sm" data-filter="jugee">Jugées</button>
+          <button class="btn btn-secondary btn-sm" data-filter="classee">Classées</button>
+        </div>
         <div id="affaires-grid" class="grid grid-3"><div class="loader">Chargement…</div></div>
       </section>
     </div>
@@ -69,11 +77,25 @@
       document.getElementById('new-btn').addEventListener('click', () => document.getElementById('new-modal').classList.add('open'));
       document.getElementById('new-cancel').addEventListener('click', () => document.getElementById('new-modal').classList.remove('open'));
       document.getElementById('new-form').addEventListener('submit', createAffaire);
+      document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+      });
       loadAnnuaire();
       loadAffaires();
       onLive(['users'], loadAnnuaire);
       onLive(['judiciaire'], loadAffaires);
     })();
+
+    let affairesCache = [];
+    let currentFilter = 'toutes';
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.className = btn.dataset.filter === filter ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+      });
+      renderAffaires();
+    }
 
     async function loadAnnuaire() {
       const grid = document.getElementById('annuaire-grid');
@@ -102,26 +124,46 @@
       const grid = document.getElementById('affaires-grid');
       try {
         const { affaires } = await api('/judiciaire');
-        if (affaires.length === 0) {
-          grid.innerHTML = '<div class="empty-state">Aucune affaire ouverte.</div>';
-          return;
-        }
-        grid.innerHTML = affaires.map(a => {
-          const [label, cls] = statutLabels[a.statut] || ['Inconnu', 'badge-muted'];
-          return `
-            <a href="affaire-detail.html?id=${a.id}" class="dossier" data-tab="${escapeHtml(a.numero)}">
-              <span class="badge ${cls}">${label}</span>
-              <h3>${escapeHtml(a.titre)}</h3>
-              <div class="meta">Avocat : ${escapeHtml(a.avocat_username || '—')} · Procureur : ${escapeHtml(a.procureur_username || '—')} · Juge : ${escapeHtml(a.juge_username || '—')}</div>
-              <div class="meta" style="margin-top:6px">
-                ${a.nb_casiers > 0 ? `<span class="badge badge-muted">${a.nb_casiers} casier(s)</span> ` : ''}
-                ${a.nb_plaintes > 0 ? `<span class="badge badge-muted">${a.nb_plaintes} plainte(s)</span>` : ''}
-              </div>
-            </a>`;
-        }).join('');
+        affairesCache = affaires;
+        renderStats();
+        renderAffaires();
       } catch (err) {
         grid.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       }
+    }
+
+    function renderStats() {
+      const counts = { ouverte: 0, audience_programmee: 0, jugee: 0, classee: 0 };
+      affairesCache.forEach(a => { if (counts[a.statut] !== undefined) counts[a.statut]++; });
+      document.getElementById('affaires-stats').innerHTML = `
+        <div class="stat-box"><span class="n">${affairesCache.length}</span><span class="l">Total</span></div>
+        <div class="stat-box"><span class="n">${counts.ouverte}</span><span class="l">Ouvertes</span></div>
+        <div class="stat-box"><span class="n">${counts.audience_programmee}</span><span class="l">Audience programmée</span></div>
+        <div class="stat-box"><span class="n">${counts.jugee}</span><span class="l">Jugées</span></div>
+        <div class="stat-box"><span class="n">${counts.classee}</span><span class="l">Classées</span></div>
+      `;
+    }
+
+    function renderAffaires() {
+      const grid = document.getElementById('affaires-grid');
+      const affaires = currentFilter === 'toutes' ? affairesCache : affairesCache.filter(a => a.statut === currentFilter);
+      if (affaires.length === 0) {
+        grid.innerHTML = '<div class="empty-state">Aucune affaire pour ce filtre.</div>';
+        return;
+      }
+      grid.innerHTML = affaires.map(a => {
+        const [label, cls] = statutLabels[a.statut] || ['Inconnu', 'badge-muted'];
+        return `
+          <a href="affaire-detail.html?id=${a.id}" class="dossier" data-tab="${escapeHtml(a.numero)}">
+            <span class="badge ${cls}">${label}</span>
+            <h3>${escapeHtml(a.titre)}</h3>
+            <div class="meta">Avocat : ${escapeHtml(a.avocat_username || '—')} · Procureur : ${escapeHtml(a.procureur_username || '—')} · Juge : ${escapeHtml(a.juge_username || '—')}</div>
+            <div class="meta" style="margin-top:6px">
+              ${a.nb_casiers > 0 ? `<span class="badge badge-muted">${a.nb_casiers} casier(s)</span> ` : ''}
+              ${a.nb_plaintes > 0 ? `<span class="badge badge-muted">${a.nb_plaintes} plainte(s)</span>` : ''}
+            </div>
+          </a>`;
+      }).join('');
     }
 
     async function createAffaire(e) {
