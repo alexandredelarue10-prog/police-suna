@@ -124,10 +124,13 @@ async function start() {
     // Génération automatique du planning : vérifiée au démarrage, puis toutes les heures.
     // Coût négligeable (quelques requêtes SQL), n'agit que si l'automatisme est activé en configuration.
     const { genererPlanningAutomatique } = require('./src/utils/planningAuto');
+    const { nettoyerPatrouillesExpirees } = require('./src/utils/patrouilleCleanup');
     const runAutoPlanning = () => {
       genererPlanningAutomatique()
         .then((r) => { if (r.genere > 0) console.log(`[planning-auto] ${r.genere} patrouille(s) générée(s).`); })
         .catch((err) => console.error('[planning-auto] Erreur :', err.message));
+      nettoyerPatrouillesExpirees()
+        .then((r) => { if (r.supprime > 0) console.log(`[planning-auto] ${r.supprime} patrouille(s) expirée(s) supprimée(s).`); });
     };
     runAutoPlanning();
     setInterval(runAutoPlanning, 60 * 60 * 1000); // toutes les heures
