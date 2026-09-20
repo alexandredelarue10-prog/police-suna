@@ -64,6 +64,9 @@ app.use(session({
 // fois le site stabilisé.
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.ico')) {
+      res.setHeader('Content-Type', 'image/x-icon'); // certains hébergeurs servent les .ico avec un mauvais type MIME par défaut
+    }
     if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
       res.setHeader('Cache-Control', 'no-cache'); // revalidation systématique, mais réponse 304 si inchangé (rapide, peu de données)
     } else {
