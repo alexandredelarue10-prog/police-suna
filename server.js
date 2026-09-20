@@ -39,7 +39,7 @@ require('./src/utils/discordNotifier'); // initialise le bot Discord (notificati
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.set('trust proxy', 1); // nécessaire derrière le proxy de Railway pour les cookies "secure"
+app.set('trust proxy', 1); // nécessaire derrière le proxy de l'hébergeur (Render, etc.) pour les cookies "secure"
 
 app.use(express.json({ limit: '512kb' })); // limite légère : évite les payloads abusifs, garde le serveur léger
 
@@ -100,7 +100,8 @@ app.use('/api/messages', messagesRoutes);
 app.use('/api/roles-judiciaires', rolesJudiciairesRoutes);
 app.use('/api/judiciaire', judiciaireRoutes);
 
-// Vérification de santé pour Railway
+// Vérification de santé pour l'hébergeur — et cible du ping de maintien en éveil (voir
+// .github/workflows/keep-alive.yml)
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // Synchronisation en direct entre utilisateurs connectés (Server-Sent Events, voir src/utils/liveSync.js)

@@ -1,0 +1,26 @@
+name: Keep-alive Render
+
+# Ping /api/health toutes les 14 minutes pour empêcher le service gratuit Render de s'endormir
+# (mise en veille après 15 minutes sans requête). Contournement toléré mais non garanti par
+# Render — voir la doc officielle : https://render.com/docs/free#spinning-down-on-idle
+#
+# GitHub désactive automatiquement les workflows programmés (cron) après 60 jours sans aucune
+# activité (commit, push...) sur le dépôt. Si le ping s'arrête après une longue pause, il suffit
+# de repousser un commit ou de relancer le workflow manuellement (onglet Actions) pour le réactiver.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+  workflow_dispatch: {} # permet de le déclencher manuellement depuis l'onglet Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          if [ -z "${{ vars.RENDER_URL }}" ]; then
+            echo "::error::La variable de dépôt RENDER_URL n'est pas définie (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+          curl -fsS --max-time 20 "${{ vars.RENDER_URL }}/api/health" || echo "::warning::Ping échoué (le service était peut-être en train de redémarrer)."

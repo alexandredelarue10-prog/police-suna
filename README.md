@@ -115,29 +115,65 @@ git push -u origin main
 Le fichier `.gitignore` exclut déjà `node_modules/` et `.env` — ne les commite jamais
 (le `.env` contient des secrets une fois rempli).
 
-## 2. Déploiement sur Railway
+## 2. Créer la base de données sur Neon
 
-1. Va sur [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** →
-   sélectionne ton dépôt.
-2. **Ajoute une base de données** : dans le projet Railway, clique **+ New** → **Database** →
-   **Add PostgreSQL**. Railway crée automatiquement la variable `DATABASE_URL` et la partage
-   avec ton service si les deux sont dans le même projet (sinon, copie la valeur manuellement).
-3. **Variables d'environnement** du service web (onglet *Variables*) :
-   - `DATABASE_URL` → normalement injectée automatiquement par le plugin PostgreSQL (référence
-     `${{Postgres.DATABASE_URL}}` si Railway te le propose).
+1. Va sur [neon.tech](https://neon.tech), crée un compte (gratuit, sans carte bancaire) et un
+   nouveau projet.
+2. Neon te donne directement une **chaîne de connexion** (bouton *Connect* sur le tableau de
+   bord du projet), du type :
+   `postgresql://user:password@ep-xxxx.aws.neon.tech/neondb?sslmode=require`
+3. Garde cette chaîne de côté, c'est ta variable `DATABASE_URL`.
+
+Le plan gratuit de Neon est permanent (pas un essai) : jusqu'à 100 projets, 0,5 Go de stockage
+et 100 heures de calcul par mois, sans carte bancaire. Le calcul se met en pause après 5 minutes
+d'inactivité (données conservées), avec une reprise quasi instantanée à la requête suivante —
+sans commune mesure avec la mise en veille du service web décrite plus bas.
+
+## 3. Déploiement sur Render
+
+1. Va sur [render.com](https://render.com) → **New** → **Web Service** → connecte ton dépôt
+   GitHub et sélectionne `police-suna`.
+2. Configuration du service :
+   - **Runtime** : Node
+   - **Build Command** : `npm install`
+   - **Start Command** : `npm start`
+   - **Instance Type** : Free
+3. **Variables d'environnement** (onglet *Environment*) :
+   - `DATABASE_URL` → la chaîne de connexion Neon récupérée à l'étape précédente.
    - `SESSION_SECRET` → génère une chaîne aléatoire longue (ex : `openssl rand -hex 32`).
    - `NODE_ENV` → `production`.
-   - `PORT` → laissé vide, Railway le fournit automatiquement.
-4. Railway détecte `package.json` et lance `npm install` puis `npm start` automatiquement.
+   - `PORT` → laissé vide, Render le fournit automatiquement.
+   - `DISCORD_BOT_TOKEN` → optionnel, voir plus bas pour les notifications Discord.
+4. Render détecte `package.json`, lance `npm install` puis `npm start`, et redéploie
+   automatiquement à chaque `git push` sur `main`.
 5. Au premier démarrage, le serveur crée les tables et les données de départ tout seul
    (`src/db/seed.js` est appelé automatiquement par `server.js`, et il est **idempotent** : le
    relancer à chaque redéploiement ne duplique rien et ne casse rien).
-6. Une fois déployé, Railway te donne une URL publique (`*.up.railway.app`). Tu peux ensuite
-   brancher un nom de domaine personnalisé dans l'onglet *Settings → Domains*.
+6. Une fois déployé, Render te donne une URL publique (`*.onrender.com`). Tu peux ensuite
+   brancher un nom de domaine personnalisé dans l'onglet *Settings → Custom Domains*.
+
+### Empêcher le service gratuit de s'endormir
+
+Le plan gratuit de Render met le service en veille après 15 minutes sans requête entrante — ce
+qui couperait le bot Discord et la synchronisation en direct entre utilisateurs à chaque fois.
+Le dépôt inclut un contournement gratuit : `.github/workflows/keep-alive.yml`, une GitHub Action
+qui ping `/api/health` toutes les 14 minutes.
+
+Pour l'activer :
+1. Sur GitHub, va dans **Settings → Secrets and variables → Actions → Variables**.
+2. Crée une variable de dépôt `RENDER_URL` avec l'URL de ton service (ex :
+   `https://police-suna.onrender.com`, sans `/` final).
+3. Le workflow se lance automatiquement au push suivant. Tu peux aussi le déclencher
+   manuellement depuis l'onglet **Actions** pour vérifier qu'il fonctionne.
+
+⚠️ Ce contournement est toléré mais **non garanti** par Render (ce n'est pas une fonctionnalité
+officiellement supportée) — largement suffisant pour une communauté RP, mais à garder en tête.
+GitHub désactive aussi automatiquement les workflows programmés après 60 jours sans aucune
+activité sur le dépôt ; un simple commit ou un déclenchement manuel suffit à le relancer.
 
 ### Vérifier que tout s'est bien passé
 
-- `https://ton-site.up.railway.app/api/health` doit renvoyer `{"status":"ok"}`.
+- `https://ton-site.onrender.com/api/health` doit renvoyer `{"status":"ok"}`.
 - Connecte-toi avec `lexioui` / `roidudev`, va sur **Mon profil** et change le mot de passe
   immédiatement.
 
