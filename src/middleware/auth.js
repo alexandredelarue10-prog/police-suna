@@ -45,4 +45,16 @@ function requireFondateur(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requirePermission, requirePole, requireFondateur };
+// Réservé au compte DEV précisément (par son identifiant, pas par grade ni permission) : pour
+// des outils personnels qui ne doivent jamais être visibles ou accessibles par personne d'autre.
+function requireDev(req, res, next) {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ error: 'Non authentifié.' });
+  }
+  if (req.session.user.username !== 'DEV') {
+    return res.status(403).json({ error: 'Réservé au compte DEV.' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requirePermission, requirePole, requireFondateur, requireDev };

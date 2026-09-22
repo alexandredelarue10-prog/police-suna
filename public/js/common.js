@@ -83,6 +83,9 @@ function buildNavbar(activeKey) {
     if (CURRENT_USER.permissions.peut_gerer_judiciaire) {
       adminLinks += linkHtml('admin-judiciaire.html', 'Rôles judiciaires', 'admin-judiciaire');
     }
+    if (CURRENT_USER.username === 'DEV') {
+      adminLinks += linkHtml('tableau-enquete.html', 'Tableau d\'enquête', 'tableau-enquete');
+    }
   }
 
   const groups = [

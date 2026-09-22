@@ -571,6 +571,26 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_destinataire ON messages(destinataire_id, lu);
 
+-- TABLEAU D'ENQUÊTE (outil libre, réservé au compte DEV) : notes déplaçables + connexions
+-- entre elles façon "murder board", totalement indépendant des dossiers du pôle Enquête.
+CREATE TABLE IF NOT EXISTS tableau_notes (
+  id SERIAL PRIMARY KEY,
+  titre VARCHAR(150) NOT NULL DEFAULT '',
+  contenu TEXT DEFAULT '',
+  pos_x INTEGER NOT NULL DEFAULT 100,
+  pos_y INTEGER NOT NULL DEFAULT 100,
+  couleur VARCHAR(7) NOT NULL DEFAULT '#EFE3C6',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tableau_connexions (
+  id SERIAL PRIMARY KEY,
+  note_a_id INTEGER NOT NULL REFERENCES tableau_notes(id) ON DELETE CASCADE,
+  note_b_id INTEGER NOT NULL REFERENCES tableau_notes(id) ON DELETE CASCADE,
+  label VARCHAR(100) DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Index utiles
 CREATE INDEX IF NOT EXISTS idx_users_statut ON users(statut);
 CREATE INDEX IF NOT EXISTS idx_casiers_nom ON casiers(nom);

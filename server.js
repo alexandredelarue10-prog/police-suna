@@ -33,6 +33,7 @@ const interneRoutes = require('./src/routes/interne.routes');
 const messagesRoutes = require('./src/routes/messages.routes');
 const rolesJudiciairesRoutes = require('./src/routes/roles-judiciaires.routes');
 const judiciaireRoutes = require('./src/routes/judiciaire.routes');
+const tableauRoutes = require('./src/routes/tableau.routes');
 const { sseHandler } = require('./src/utils/liveSync');
 require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
 
@@ -102,6 +103,7 @@ app.use('/api/interne', interneRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/roles-judiciaires', rolesJudiciairesRoutes);
 app.use('/api/judiciaire', judiciaireRoutes);
+app.use('/api/tableau', tableauRoutes);
 
 // Vérification de santé pour l'hébergeur — et cible du ping de maintien en éveil (voir
 // .github/workflows/keep-alive.yml)
