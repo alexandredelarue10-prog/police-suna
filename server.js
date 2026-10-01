@@ -40,9 +40,11 @@ function isHub(req) {
 }
 const cookieOpts = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' };
 
-// Aucun mot de passe par défaut : HUB_PASSWORD_HASH (bcrypt, recommandé) ou HUB_PASSWORD
+// Mot de passe du hub : hash bcrypt (jamais le mot de passe en clair dans le code).
+// HUB_PASSWORD_HASH (variable d'environnement) prend le dessus si définie : à utiliser pour changer le mot de passe.
+const DEFAULT_HUB_HASH = '$2a$12$MBOSPUcfRXxwGx5L3ZiacOg9FJkiiKAh0UDPafHiJYRA2WULDzhkq';
 async function checkPassword(pwd) {
-  const hash = process.env.HUB_PASSWORD_HASH;
+  const hash = process.env.HUB_PASSWORD_HASH || DEFAULT_HUB_HASH;
   const plain = process.env.HUB_PASSWORD;
   if (hash) return bcrypt.compare(pwd, hash);
   if (plain) {
@@ -69,9 +71,6 @@ function echec(ip) {
 const requireHub = (req, res, next) => (isHub(req) ? next() : res.status(401).json({ error: 'Non connecté.' }));
 
 app.post('/hub/login', async (req, res) => {
-  if (!process.env.HUB_PASSWORD_HASH && !process.env.HUB_PASSWORD) {
-    return res.status(503).json({ error: 'Mot de passe du hub non configuré (HUB_PASSWORD_HASH).' });
-  }
   if (limite(req.ip)) return res.status(429).json({ error: 'Trop de tentatives. Réessaie dans 15 minutes.' });
   const ok = await checkPassword(String((req.body && req.body.password) || ''));
   if (!ok) { echec(req.ip); return res.status(401).json({ error: 'Mot de passe incorrect.' }); }

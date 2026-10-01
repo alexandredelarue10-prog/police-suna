@@ -13,7 +13,7 @@ Le dépôt contient désormais **deux couches** :
 | `HUB_PASSWORD_HASH` | hash bcrypt du mot de passe du hub : `npm run hub:hash -- "ton mot de passe"` |
 | `HUB_SESSION_SECRET` | chaîne aléatoire longue ; la changer déconnecte tous les appareils |
 
-Aucun mot de passe par défaut : sans `HUB_PASSWORD_HASH` (ou `HUB_PASSWORD`), la connexion au hub est refusée.
+Un hash bcrypt par défaut est dans `server.js` ; définir `HUB_PASSWORD_HASH` sur Render le remplace (pour changer le mot de passe).
 
 ## Ajouter un projet
 
