@@ -1,3 +1,28 @@
+# Hub privé + police-suna
+
+Le dépôt contient désormais **deux couches** :
+
+- **Hub privé** (`/`) : page protégée par mot de passe, d'où tu choisis le projet à ouvrir. La liste est dans `hub/projets.json` (servie uniquement après connexion).
+- **police-suna** (`/police-suna/`) : le site complet, inchangé, dans `apps/police-suna/`. Il garde ses propres comptes (DEV, etc.) pour que les membres du RP y accèdent directement.
+
+## Variables d'environnement (Render)
+
+| Variable | Rôle |
+|---|---|
+| `DATABASE_URL`, `SESSION_SECRET`, `DISCORD_BOT_TOKEN`… | inchangées (police-suna) |
+| `HUB_PASSWORD_HASH` | hash bcrypt du mot de passe du hub : `npm run hub:hash -- "ton mot de passe"` |
+| `HUB_SESSION_SECRET` | chaîne aléatoire longue ; la changer déconnecte tous les appareils |
+
+Aucun mot de passe par défaut : sans `HUB_PASSWORD_HASH` (ou `HUB_PASSWORD`), la connexion au hub est refusée.
+
+## Ajouter un projet
+
+Ajouter une entrée dans `hub/projets.json` (`id`, `nom`, `description`, `tags`, `statut`, `url`). Un site externe = une URL complète ; un site hébergé ici = un dossier dans `apps/` monté dans `server.js`.
+
+Le ping keep-alive (`/api/health`) et `npm start` ne changent pas.
+
+---
+
 # Police de Sunagakure — Site officiel
 
 Site de gestion pour la police de Suna (RP Naruto) : vitrine publique, organigramme, code pénal

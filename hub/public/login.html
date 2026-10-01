@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Accès privé</title><link rel="stylesheet" href="/assets/hub.css"></head>
+<body><div class="login"><h1>Accès privé</h1><p>Espace personnel de Lexoui.</p>
+<input id="pw" type="password" placeholder="Mot de passe" autocomplete="current-password" autofocus>
+<div class="err" id="err"></div><button class="btn" id="go" style="width:100%">Entrer</button></div>
+<script>
+const pw=document.getElementById('pw'),err=document.getElementById('err');
+async function go(){err.textContent='';
+  const r=await fetch('/hub/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw.value})});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok)location.reload();else{err.textContent=d.error||'Erreur.';pw.select();}}
+document.getElementById('go').onclick=go;pw.onkeydown=e=>{if(e.key==='Enter')go()};
+</script></body></html>

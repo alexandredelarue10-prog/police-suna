@@ -1,149 +1,99 @@
 require('dotenv').config();
 const express = require('express');
-const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
-const pool = require('./src/config/db');
-const runSeed = require('./src/db/seed');
-const { requireAuth } = require('./src/middleware/auth');
-
-const { router: authRoutes } = require('./src/routes/auth.routes');
-const usersRoutes = require('./src/routes/users.routes');
-const gradesRoutes = require('./src/routes/grades.routes');
-const sanctionsRoutes = require('./src/routes/sanctions.routes');
-const casiersRoutes = require('./src/routes/casiers.routes');
-const casierNotesRoutes = require('./src/routes/casier-notes.routes');
-const newsRoutes = require('./src/routes/news.routes');
-const blamesRoutes = require('./src/routes/blames.routes');
-const recidivesRoutes = require('./src/routes/recidives.routes');
-const alertesRoutes = require('./src/routes/alertes.routes');
-const rangsRoutes = require('./src/routes/rangs.routes');
-const journalRoutes = require('./src/routes/journal.routes');
-const userBlamesRoutes = require('./src/routes/user-blames.routes');
-const patrouillesRoutes = require('./src/routes/patrouilles.routes');
-const statsRoutes = require('./src/routes/stats.routes');
-const rechercheRoutes = require('./src/routes/recherche.routes');
-const settingsRoutes = require('./src/routes/settings.routes');
-const plaintesRoutes = require('./src/routes/plaintes.routes');
-const polesRoutes = require('./src/routes/poles.routes');
-const administratifRoutes = require('./src/routes/administratif.routes');
-const enquetesRoutes = require('./src/routes/enquetes.routes');
-const securiteRoutes = require('./src/routes/securite.routes');
-const interneRoutes = require('./src/routes/interne.routes');
-const messagesRoutes = require('./src/routes/messages.routes');
-const rolesJudiciairesRoutes = require('./src/routes/roles-judiciaires.routes');
-const judiciaireRoutes = require('./src/routes/judiciaire.routes');
-const tableauRoutes = require('./src/routes/tableau.routes');
-const { sseHandler } = require('./src/utils/liveSync');
-require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
+const police = require('./apps/police-suna');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', 1);
 
-app.set('trust proxy', 1); // nécessaire derrière le proxy de l'hébergeur (Render, etc.) pour les cookies "secure"
-
-app.use(express.json({ limit: '512kb' })); // limite légère : évite les payloads abusifs, garde le serveur léger
-
-// Sessions stockées en base (persistant, léger, évite de perdre les connexions au redéploiement)
-app.use(session({
-  store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
-  secret: process.env.SESSION_SECRET || 'dev-secret-a-changer',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-  },
-}));
-
-// Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger
-// Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger.
-// Cache court pour HTML/JS/CSS (le site évolue souvent) afin d'éviter qu'un navigateur ne garde
-// une vieille version du JS après un déploiement ; un cache plus long serait envisageable une
-// fois le site stabilisé.
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.ico')) {
-      res.setHeader('Content-Type', 'image/x-icon'); // certains hébergeurs servent les .ico avec un mauvais type MIME par défaut
-    }
-    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'no-cache'); // revalidation systématique, mais réponse 304 si inchangé (rapide, peu de données)
-    } else {
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-    }
-  },
-}));
-
-// API
-app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/grades', gradesRoutes);
-app.use('/api/sanctions', sanctionsRoutes);
-app.use('/api/casiers', casiersRoutes);
-app.use('/api/casiers', casierNotesRoutes); // ajoute /:id/notes et /notes/:noteId sous /api/casiers
-app.use('/api/actus', newsRoutes);
-app.use('/api/blames', blamesRoutes);
-app.use('/api/recidives', recidivesRoutes);
-app.use('/api/alertes', alertesRoutes);
-app.use('/api/rangs', rangsRoutes);
-app.use('/api/journal', journalRoutes);
-app.use('/api/users', userBlamesRoutes); // ajoute /:id/blames et /blames/:blameId sous /api/users
-app.use('/api/patrouilles', patrouillesRoutes);
-app.use('/api/stats', statsRoutes);
-app.use('/api/recherche', rechercheRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/plaintes', plaintesRoutes);
-app.use('/api/poles', polesRoutes);
-app.use('/api/administratif', administratifRoutes);
-app.use('/api/enquetes', enquetesRoutes);
-app.use('/api/securite', securiteRoutes);
-app.use('/api/interne', interneRoutes);
-app.use('/api/messages', messagesRoutes);
-app.use('/api/roles-judiciaires', rolesJudiciairesRoutes);
-app.use('/api/judiciaire', judiciaireRoutes);
-app.use('/api/tableau', tableauRoutes);
-
-// Vérification de santé pour l'hébergeur — et cible du ping de maintien en éveil (voir
-// .github/workflows/keep-alive.yml)
+// Santé + cible du ping keep-alive (GitHub Actions) — avant tout le reste, sans session
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-// Synchronisation en direct entre utilisateurs connectés (Server-Sent Events, voir src/utils/liveSync.js)
-app.get('/api/events', requireAuth, sseHandler);
+// police-suna complet, accessible à ses membres avec ses propres comptes (inchangés)
+app.get(/^\/police-suna$/, (req, res) => res.redirect('/police-suna/')); // le slash final garde les liens relatifs valides
+app.use('/police-suna', police.app);
 
-// Toute autre route -> page 404 statique (le front est en pages HTML distinctes, pas de SPA routing complexe)
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'Route API introuvable.' });
-  }
-  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+// ---------------- HUB PRIVÉ ----------------
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Cache-Control', 'no-store');
+  next();
 });
+app.use(express.json({ limit: '8kb' }));
+// Session du hub : cookie signé (HMAC) à expiration, sans base de données (un seul utilisateur).
+// Changer HUB_SESSION_SECRET déconnecte immédiatement tous les appareils.
+const SECRET = process.env.HUB_SESSION_SECRET || process.env.SESSION_SECRET || 'dev-secret-a-changer';
+const DUREE = 7 * 24 * 60 * 60 * 1000;
+const sign = (exp) => crypto.createHmac('sha256', SECRET).update('hub.' + exp).digest('hex');
+function isHub(req) {
+  const m = /(?:^|;\s*)hub\.sid=([^;]+)/.exec(req.headers.cookie || '');
+  if (!m) return false;
+  const [exp, sig] = decodeURIComponent(m[1]).split('.');
+  if (!exp || !sig || Number(exp) < Date.now()) return false;
+  const a = Buffer.from(sig), b = Buffer.from(sign(exp));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+const cookieOpts = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' };
 
-async function start() {
-  try {
-    await runSeed(); // crée les tables + données par défaut si nécessaire (idempotent)
-    app.listen(PORT, () => {
-      console.log(`[server] Police de Sunagakure en ligne sur le port ${PORT}`);
-    });
-
-    // Génération automatique du planning : vérifiée au démarrage, puis toutes les heures.
-    // Coût négligeable (quelques requêtes SQL), n'agit que si l'automatisme est activé en configuration.
-    const { genererPlanningAutomatique } = require('./src/utils/planningAuto');
-    const { nettoyerPatrouillesExpirees } = require('./src/utils/patrouilleCleanup');
-    const runAutoPlanning = () => {
-      genererPlanningAutomatique()
-        .then((r) => { if (r.genere > 0) console.log(`[planning-auto] ${r.genere} patrouille(s) générée(s).`); })
-        .catch((err) => console.error('[planning-auto] Erreur :', err.message));
-      nettoyerPatrouillesExpirees()
-        .then((r) => { if (r.supprime > 0) console.log(`[planning-auto] ${r.supprime} patrouille(s) expirée(s) supprimée(s).`); });
-    };
-    runAutoPlanning();
-    setInterval(runAutoPlanning, 60 * 60 * 1000); // toutes les heures
-  } catch (err) {
-    console.error('[server] Échec du démarrage :', err);
-    process.exit(1);
+// Aucun mot de passe par défaut : HUB_PASSWORD_HASH (bcrypt, recommandé) ou HUB_PASSWORD
+async function checkPassword(pwd) {
+  const hash = process.env.HUB_PASSWORD_HASH;
+  const plain = process.env.HUB_PASSWORD;
+  if (hash) return bcrypt.compare(pwd, hash);
+  if (plain) {
+    const a = crypto.createHash('sha256').update(pwd).digest();
+    const b = crypto.createHash('sha256').update(plain).digest();
+    return crypto.timingSafeEqual(a, b);
   }
+  return false;
 }
 
-start();
+// Limite anti force brute : 5 échecs / 15 min par IP
+const essais = new Map();
+function limite(ip) {
+  const e = essais.get(ip);
+  if (!e || e.fin < Date.now()) return false;
+  return e.n >= 5;
+}
+function echec(ip) {
+  const e = essais.get(ip);
+  if (!e || e.fin < Date.now()) essais.set(ip, { n: 1, fin: Date.now() + 15 * 60 * 1000 });
+  else e.n += 1;
+}
+
+const requireHub = (req, res, next) => (isHub(req) ? next() : res.status(401).json({ error: 'Non connecté.' }));
+
+app.post('/hub/login', async (req, res) => {
+  if (!process.env.HUB_PASSWORD_HASH && !process.env.HUB_PASSWORD) {
+    return res.status(503).json({ error: 'Mot de passe du hub non configuré (HUB_PASSWORD_HASH).' });
+  }
+  if (limite(req.ip)) return res.status(429).json({ error: 'Trop de tentatives. Réessaie dans 15 minutes.' });
+  const ok = await checkPassword(String((req.body && req.body.password) || ''));
+  if (!ok) { echec(req.ip); return res.status(401).json({ error: 'Mot de passe incorrect.' }); }
+  const exp = Date.now() + DUREE;
+  res.cookie('hub.sid', `${exp}.${sign(exp)}`, { ...cookieOpts, maxAge: DUREE });
+  res.json({ ok: true });
+});
+
+app.post('/hub/logout', (req, res) => { res.clearCookie('hub.sid', cookieOpts); res.json({ ok: true }); });
+
+// La liste des projets n'est servie qu'après connexion
+app.get('/hub/projets', requireHub, (req, res) => {
+  res.sendFile(path.join(__dirname, 'hub', 'projets.json'));
+});
+
+app.use('/assets', express.static(path.join(__dirname, 'hub', 'public', 'assets')));
+app.get('/', (req, res) => {
+  const page = isHub(req) ? 'dashboard.html' : 'login.html';
+  res.sendFile(path.join(__dirname, 'hub', 'public', page));
+});
+app.use((req, res) => res.redirect('/'));
+
+police.init()
+  .then(() => app.listen(PORT, () => console.log(`[server] Hub privé + police-suna en ligne sur le port ${PORT}`)))
+  .catch((err) => { console.error('[server] Échec du démarrage :', err); process.exit(1); });

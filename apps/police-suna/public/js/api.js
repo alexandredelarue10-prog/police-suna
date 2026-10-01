@@ -11,7 +11,7 @@ async function api(path, options = {}) {
 
   let res;
   try {
-    res = await fetch('/api' + path, opts);
+    res = await fetch('api' + path, opts);
   } catch (err) {
     throw new Error('Impossible de contacter le serveur. Vérifiez votre connexion.');
   }

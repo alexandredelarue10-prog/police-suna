@@ -1,0 +1,140 @@
+const express = require('express');
+const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
+const path = require('path');
+const pool = require('./src/config/db');
+const runSeed = require('./src/db/seed');
+const { requireAuth } = require('./src/middleware/auth');
+
+const { router: authRoutes } = require('./src/routes/auth.routes');
+const usersRoutes = require('./src/routes/users.routes');
+const gradesRoutes = require('./src/routes/grades.routes');
+const sanctionsRoutes = require('./src/routes/sanctions.routes');
+const casiersRoutes = require('./src/routes/casiers.routes');
+const casierNotesRoutes = require('./src/routes/casier-notes.routes');
+const newsRoutes = require('./src/routes/news.routes');
+const blamesRoutes = require('./src/routes/blames.routes');
+const recidivesRoutes = require('./src/routes/recidives.routes');
+const alertesRoutes = require('./src/routes/alertes.routes');
+const rangsRoutes = require('./src/routes/rangs.routes');
+const journalRoutes = require('./src/routes/journal.routes');
+const userBlamesRoutes = require('./src/routes/user-blames.routes');
+const patrouillesRoutes = require('./src/routes/patrouilles.routes');
+const statsRoutes = require('./src/routes/stats.routes');
+const rechercheRoutes = require('./src/routes/recherche.routes');
+const settingsRoutes = require('./src/routes/settings.routes');
+const plaintesRoutes = require('./src/routes/plaintes.routes');
+const polesRoutes = require('./src/routes/poles.routes');
+const administratifRoutes = require('./src/routes/administratif.routes');
+const enquetesRoutes = require('./src/routes/enquetes.routes');
+const securiteRoutes = require('./src/routes/securite.routes');
+const interneRoutes = require('./src/routes/interne.routes');
+const messagesRoutes = require('./src/routes/messages.routes');
+const rolesJudiciairesRoutes = require('./src/routes/roles-judiciaires.routes');
+const judiciaireRoutes = require('./src/routes/judiciaire.routes');
+const tableauRoutes = require('./src/routes/tableau.routes');
+const { sseHandler } = require('./src/utils/liveSync');
+require('./src/utils/discordNotifier'); // initialise le bot Discord (notifications par DM) dès le démarrage
+
+const app = express();
+
+app.set('trust proxy', 1);
+
+app.use(express.json({ limit: '512kb' })); // limite légère : évite les payloads abusifs, garde le serveur léger
+
+// Sessions stockées en base (persistant, léger, évite de perdre les connexions au redéploiement)
+app.use(session({
+  store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
+  name: 'suna.sid', // nom distinct du cookie du hub
+  secret: process.env.SESSION_SECRET || 'dev-secret-a-changer',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    path: '/police-suna',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  },
+}));
+
+// Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger
+// Fichiers statiques (HTML/CSS/JS) — pas de moteur de template = zéro rendu serveur = très léger.
+// Cache court pour HTML/JS/CSS (le site évolue souvent) afin d'éviter qu'un navigateur ne garde
+// une vieille version du JS après un déploiement ; un cache plus long serait envisageable une
+// fois le site stabilisé.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.ico')) {
+      res.setHeader('Content-Type', 'image/x-icon'); // certains hébergeurs servent les .ico avec un mauvais type MIME par défaut
+    }
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache'); // revalidation systématique, mais réponse 304 si inchangé (rapide, peu de données)
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  },
+}));
+
+// API
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/grades', gradesRoutes);
+app.use('/api/sanctions', sanctionsRoutes);
+app.use('/api/casiers', casiersRoutes);
+app.use('/api/casiers', casierNotesRoutes); // ajoute /:id/notes et /notes/:noteId sous /api/casiers
+app.use('/api/actus', newsRoutes);
+app.use('/api/blames', blamesRoutes);
+app.use('/api/recidives', recidivesRoutes);
+app.use('/api/alertes', alertesRoutes);
+app.use('/api/rangs', rangsRoutes);
+app.use('/api/journal', journalRoutes);
+app.use('/api/users', userBlamesRoutes); // ajoute /:id/blames et /blames/:blameId sous /api/users
+app.use('/api/patrouilles', patrouillesRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/recherche', rechercheRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/plaintes', plaintesRoutes);
+app.use('/api/poles', polesRoutes);
+app.use('/api/administratif', administratifRoutes);
+app.use('/api/enquetes', enquetesRoutes);
+app.use('/api/securite', securiteRoutes);
+app.use('/api/interne', interneRoutes);
+app.use('/api/messages', messagesRoutes);
+app.use('/api/roles-judiciaires', rolesJudiciairesRoutes);
+app.use('/api/judiciaire', judiciaireRoutes);
+app.use('/api/tableau', tableauRoutes);
+
+// Vérification de santé pour l'hébergeur — et cible du ping de maintien en éveil (voir
+// .github/workflows/keep-alive.yml)
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Synchronisation en direct entre utilisateurs connectés (Server-Sent Events, voir src/utils/liveSync.js)
+app.get('/api/events', requireAuth, sseHandler);
+
+// Toute autre route -> page 404 statique (le front est en pages HTML distinctes, pas de SPA routing complexe)
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Route API introuvable.' });
+  }
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
+
+async function init() {
+  await runSeed(); // crée les tables + données par défaut si nécessaire (idempotent)
+
+  // Génération automatique du planning : au démarrage, puis toutes les heures.
+  const { genererPlanningAutomatique } = require('./src/utils/planningAuto');
+  const { nettoyerPatrouillesExpirees } = require('./src/utils/patrouilleCleanup');
+  const runAutoPlanning = () => {
+    genererPlanningAutomatique()
+      .then((r) => { if (r.genere > 0) console.log(`[planning-auto] ${r.genere} patrouille(s) générée(s).`); })
+      .catch((err) => console.error('[planning-auto] Erreur :', err.message));
+    nettoyerPatrouillesExpirees()
+      .then((r) => { if (r.supprime > 0) console.log(`[planning-auto] ${r.supprime} patrouille(s) expirée(s) supprimée(s).`); });
+  };
+  runAutoPlanning();
+  setInterval(runAutoPlanning, 60 * 60 * 1000);
+}
+
+module.exports = { app, init };

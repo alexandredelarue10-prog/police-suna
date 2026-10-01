@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--sable:#EFE3C6;--argile:#B8642E;--argile-d:#7C3F18;--nuit:#17150F;--nuit2:#24211B;--or:#CBA84C;--papier:#F6EFDC;--vert:#5C7A3F;--sceau:#7A2E2E}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:var(--papier);background:radial-gradient(circle at 50% 0,#3a2f1f,var(--nuit) 70%)}
+h1,h2{font-family:Oswald,'Arial Narrow',sans-serif;letter-spacing:.04em;margin:0}
+.wrap{max-width:960px;margin:0 auto;padding:40px 20px}
+.head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:28px;border-bottom:1px solid #ffffff22;padding-bottom:16px}
+.head h1{font-size:28px;color:var(--or)}
+.btn{font:inherit;cursor:pointer;border:0;border-radius:4px;padding:10px 18px;background:var(--argile);color:#fff;text-decoration:none;display:inline-block;font-weight:600}
+.btn:hover{background:var(--argile-d)}.btn.ghost{background:transparent;border:1px solid #ffffff44}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+.card{background:var(--nuit2);border:1px solid #ffffff1a;border-radius:6px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 6px 20px #0006}
+.card h2{font-size:20px}.card p{margin:0;color:#e4d3a8;font-size:14px;line-height:1.5;flex:1}
+.tags{display:flex;flex-wrap:wrap;gap:6px}.tag{font-size:12px;padding:2px 8px;border-radius:99px;background:#ffffff14}
+.st{font-size:12px;font-weight:600;color:var(--vert)}.vide{opacity:.7}
+.login{max-width:360px;margin:12vh auto 0;background:var(--nuit2);padding:32px;border-radius:6px;border:1px solid #ffffff1a;box-shadow:0 10px 30px #0008}
+.login h1{color:var(--or);font-size:26px;margin-bottom:6px}.login p{margin:0 0 20px;font-size:14px;opacity:.8}
+input{width:100%;padding:11px;border-radius:4px;border:1px solid #ffffff33;background:var(--nuit);color:var(--papier);font:inherit;margin-bottom:14px}
+.err{color:#e08a8a;font-size:14px;min-height:20px;margin-bottom:8px}

@@ -242,7 +242,7 @@ const liveListeners = [];
 function initLiveSync() {
   if (!CURRENT_USER || liveSource) return;
   try {
-    liveSource = new EventSource('/api/events');
+    liveSource = new EventSource('api/events');
     liveSource.onmessage = (e) => {
       let payload;
       try { payload = JSON.parse(e.data); } catch (_) { return; }
