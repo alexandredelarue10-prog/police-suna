@@ -4,10 +4,7 @@
 <body><div class="wrap">
 <div class="head"><h1>Administration</h1><div class="row"><a class="btn ghost" href="/">Portfolio</a><button class="btn ghost" id="out">Déconnexion</button></div></div>
 
-<div class="panel"><h2>Bloquer l'accès à police-suna</h2>
-<div class="row"><label><input type="checkbox" id="m-actif"> Site fermé pour tout le monde (sauf toi)</label></div>
-<textarea id="m-msg" maxlength="500" placeholder="Message de maintenance affiché aux visiteurs (facultatif)"></textarea>
-<div class="row"><button class="btn" id="m-save">Enregistrer</button><span class="msg" id="m-res"></span></div></div>
+<div class="panel"><h2>Verrouiller un site</h2><p class="mut" style="margin:0 0 6px">Chaque site se ferme séparément pour tous les visiteurs ; toi, connecté ici, tu gardes l'accès.</p><div id="locks"></div></div>
 
 <div class="panel"><h2>Bandeau d'annonce</h2>
 <div class="row"><label><input type="checkbox" id="a-actif"> Afficher le bandeau en haut de police-suna</label></div>
@@ -27,13 +24,13 @@ async function api(url,body){const r=await fetch(url,body===undefined?{}:{method
   if(r.status===401){location.reload();throw 0}return r.json()}
 const flash=(id,t)=>{$(id).textContent=t;setTimeout(()=>$(id).textContent='',3000)};
 function charger(){api('/hub/admin/etat').then(e=>{
-  $('m-actif').checked=e.maintenance.actif;$('m-msg').value=e.maintenance.message||'';
+  $('locks').innerHTML=e.sites.map(s=>`<div style="padding:10px 0;border-bottom:1px solid #ffffff1a"><div class="row"><b style="min-width:180px">${esc(s.nom)}</b><label><input type="checkbox" class="l-on" data-s="${esc(s.id)}" ${s.actif?'checked':''}> Fermé</label></div><textarea class="l-msg" data-s="${esc(s.id)}" maxlength="500" placeholder="Message affiché aux visiteurs (facultatif)">${esc(s.message)}</textarea><div class="row"><button class="btn l-save" data-s="${esc(s.id)}">Enregistrer</button><span class="msg"></span></div></div>`).join('');
+  document.querySelectorAll('.l-save').forEach(b=>b.onclick=async()=>{const k=b.dataset.s;await api('/hub/admin/lock/'+k,{actif:document.querySelector('.l-on[data-s="'+k+'"]').checked,message:document.querySelector('.l-msg[data-s="'+k+'"]').value});b.nextElementSibling.textContent='Enregistré.';setTimeout(()=>b.nextElementSibling.textContent='',3000)});
   $('a-actif').checked=e.annonce.actif;$('a-txt').value=e.annonce.texte||'';
   const c=e.stats.comptes||{};
   $('stats').innerHTML=e.stats.erreur?esc(e.stats.erreur):`<div>Comptes : <b>${c.approuve||0}</b> approuvés · <b>${c.en_attente||0}</b> en attente · <b>${c.refuse||0}</b> refusés</div>
   <table><tr><th>Connecté (session active)</th><th>Dernière activité</th></tr>${(e.stats.sessions||[]).map(s=>`<tr><td>${esc(s.username)}</td><td>${new Date(s.derniere_activite).toLocaleString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan="2">Aucune session active.</td></tr>'}</table>`;
 })}
-$('m-save').onclick=async()=>{await api('/hub/admin/maintenance',{actif:$('m-actif').checked,message:$('m-msg').value});flash('m-res','Enregistré.')};
 $('a-save').onclick=async()=>{await api('/hub/admin/annonce',{actif:$('a-actif').checked,texte:$('a-txt').value});flash('a-res','Enregistré.')};
 $('kick').onclick=async()=>{if(!confirm('Déconnecter tous les utilisateurs de police-suna ?'))return;const r=await api('/hub/admin/deconnecter-tous',{});flash('k-res',r.deconnectes+' session(s) fermée(s).');charger()};
 $('out').onclick=()=>fetch('/hub/logout',{method:'POST'}).then(()=>location.href='/');

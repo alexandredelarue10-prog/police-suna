@@ -16,18 +16,23 @@ app.set('trust proxy', 1);
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ---------- Réglages admin (en mémoire, persistés en base) ----------
-const reglages = { maintenance: { actif: false, message: '' }, annonce: { actif: false, texte: '' } };
+const SITES = ['police-suna', 'dojo-fuinjutsu']; // sites hébergés ici, verrouillables séparément
+const reglages = { locks: {}, annonce: { actif: false, texte: '' } };
 async function chargerReglages() {
   await pool.query('CREATE TABLE IF NOT EXISTS hub_settings (cle TEXT PRIMARY KEY, valeur JSONB NOT NULL)');
   const { rows } = await pool.query('SELECT cle, valeur FROM hub_settings');
-  for (const r of rows) if (reglages[r.cle]) reglages[r.cle] = { ...reglages[r.cle], ...r.valeur };
+  for (const r of rows) {
+    if (r.cle === 'annonce') reglages.annonce = { ...reglages.annonce, ...r.valeur };
+    else if (r.cle.startsWith('lock:')) reglages.locks[r.cle.slice(5)] = r.valeur;
+    else if (r.cle === 'maintenance' && !reglages.locks['police-suna']) reglages.locks['police-suna'] = r.valeur; // ancien réglage
+  }
 }
 async function sauver(cle, valeur) {
   await pool.query(
     'INSERT INTO hub_settings (cle, valeur) VALUES ($1,$2) ON CONFLICT (cle) DO UPDATE SET valeur = EXCLUDED.valeur',
     [cle, JSON.stringify(valeur)]
   );
-  reglages[cle] = valeur;
+  if (cle.startsWith('lock:')) reglages.locks[cle.slice(5)] = valeur; else reglages[cle] = valeur;
 }
 
 // ---------- Session admin : cookie signé (HMAC), sans base ----------
@@ -46,7 +51,7 @@ function isHub(req) {
 const cookieOpts = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' };
 const requireHub = (req, res, next) => (isHub(req) ? next() : res.status(401).json({ error: 'Non connecté.' }));
 
-// ---------- Maintenance : bloque police-suna pour tous, sauf l'admin connecté ----------
+// ---------- Verrous : chaque site peut être fermé séparément (l'admin connecté garde l'accès) ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MSG_DEFAUT = 'Le site est temporairement fermé. Revenez plus tard.';
 function pageMaintenance(msg) {
@@ -55,12 +60,14 @@ function pageMaintenance(msg) {
 h1{font-family:Oswald,'Arial Narrow',sans-serif;color:#CBA84C;letter-spacing:.05em}p{max-width:480px;line-height:1.6;white-space:pre-wrap}</style></head>
 <body><div><h1>Accès fermé</h1><p>${esc(msg || MSG_DEFAUT)}</p></div></body></html>`;
 }
-app.use('/police-suna', (req, res, next) => {
-  if (!reglages.maintenance.actif || isHub(req)) return next();
-  const msg = reglages.maintenance.message || MSG_DEFAUT;
+const verrou = (site) => (req, res, next) => {
+  const l = reglages.locks[site];
+  if (!l || !l.actif || isHub(req)) return next();
+  const msg = l.message || MSG_DEFAUT;
   if (req.path.startsWith('/api/')) return res.status(503).json({ error: msg, maintenance: true });
   res.status(503).set('Retry-After', '300').type('html').send(pageMaintenance(msg));
-});
+};
+app.use('/police-suna', verrou('police-suna'));
 
 // police-suna complet, avec ses propres comptes (inchangés)
 app.get(/^\/police-suna$/, (req, res) => res.redirect('/police-suna/')); // le slash final garde les liens relatifs valides
@@ -68,7 +75,7 @@ app.use('/police-suna', police.app);
 
 // Dojo de fuinjutsu : l'admin du hub y agit comme Maître
 app.get(/^\/dojo-fuinjutsu$/, (req, res) => res.redirect('/dojo-fuinjutsu/'));
-app.use('/dojo-fuinjutsu', (req, res, next) => { req.hubAdmin = isHub(req); next(); }, dojo.app);
+app.use('/dojo-fuinjutsu', verrou('dojo-fuinjutsu'), (req, res, next) => { req.hubAdmin = isHub(req); next(); }, dojo.app);
 
 // ---------- Hub ----------
 app.use((req, res, next) => {
@@ -106,7 +113,7 @@ app.post('/hub/logout', (req, res) => { res.clearCookie('hub.sid', cookieOpts); 
 
 // Public : projets visibles (public !== false) et bandeau d'annonce
 const lireProjets = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'hub', 'projets.json'), 'utf8'));
-app.get('/hub/projets', (req, res) => res.json(lireProjets().filter((p) => p.public !== false)));
+app.get('/hub/projets', (req, res) => res.json(lireProjets().filter((p) => p.public !== false).map((p) => ({ ...p, ferme: !!(reglages.locks[p.id] && reglages.locks[p.id].actif) }))));
 app.get('/hub/annonce', (req, res) => {
   const a = reglages.annonce;
   res.json(a.actif && a.texte ? { texte: a.texte } : {});
@@ -124,12 +131,15 @@ app.get('/hub/admin/etat', requireHub, async (req, res) => {
       FROM session WHERE expire > now() AND sess->'user' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 15`);
     stats.sessions = s.rows;
   } catch (err) { stats.erreur = 'Stats indisponibles.'; }
-  res.json({ maintenance: reglages.maintenance, annonce: reglages.annonce, stats });
+  const noms = Object.fromEntries(lireProjets().map((p) => [p.id, p.nom]));
+  const sites = SITES.map((id) => ({ id, nom: noms[id] || id, actif: !!(reglages.locks[id] && reglages.locks[id].actif), message: (reglages.locks[id] && reglages.locks[id].message) || '' }));
+  res.json({ sites, annonce: reglages.annonce, stats });
 });
 const texte = (v, max) => String(v ?? '').trim().slice(0, max);
-app.post('/hub/admin/maintenance', requireHub, async (req, res) => {
-  await sauver('maintenance', { actif: !!req.body.actif, message: texte(req.body.message, 500) });
-  res.json(reglages.maintenance);
+app.post('/hub/admin/lock/:site', requireHub, async (req, res) => {
+  if (!SITES.includes(req.params.site)) return res.status(404).json({ error: 'Site inconnu.' });
+  await sauver('lock:' + req.params.site, { actif: !!req.body.actif, message: texte(req.body.message, 500) });
+  res.json(reglages.locks[req.params.site]);
 });
 app.post('/hub/admin/annonce', requireHub, async (req, res) => {
   await sauver('annonce', { actif: !!req.body.actif, texte: texte(req.body.texte, 300) });

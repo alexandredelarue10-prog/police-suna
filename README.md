@@ -1,7 +1,7 @@
 # Portfolio + admin + police-suna
 
 - **`/`** : page publique avec tes projets (`hub/projets.json`, champ `"public": false` pour en masquer un).
-- **`/admin`** : connexion par mot de passe (hash bcrypt dans `server.js`, remplaçable via `HUB_PASSWORD_HASH` sur Render). Permet de : fermer l'accès à police-suna (message de maintenance personnalisé, tu gardes l'accès), afficher un bandeau d'annonce, déconnecter tous les utilisateurs, voir les comptes et sessions actives.
+- **`/admin`** : connexion par mot de passe (hash bcrypt dans `server.js`, remplaçable via `HUB_PASSWORD_HASH` sur Render). Permet de : fermer chaque site séparément (police-suna, dojo…) avec un message personnalisé, tu gardes l'accès, afficher un bandeau d'annonce, déconnecter tous les utilisateurs, voir les comptes et sessions actives.
 - **`/dojo-fuinjutsu/`** : site RP du dojo de fuinjutsu (`apps/dojo-fuinjutsu/`) : grades Maître / Co-Maître / Professeur / Adepte, quatre Barrières, grimoire, examens, séances avec appel, annonces, carnet, stats. Le compte admin du hub y agit comme Maître (il valide les premiers comptes).
 - **`/police-suna/`** : le site complet (`apps/police-suna/`), avec ses propres comptes.
 
