@@ -12,5 +12,18 @@
     "statut": "En ligne",
     "url": "/police-suna/",
     "public": true
+  },
+  {
+    "id": "dojo-fuinjutsu",
+    "nom": "Dojo de Fuinjutsu",
+    "description": "Site RP d'un dojo de scellement : grades (Maître, Co-Maître, Professeur, Adepte), les quatre Barrières, grimoire, examens, séances avec appel, carnet d'entraînement.",
+    "tags": [
+      "Node.js",
+      "Express",
+      "PostgreSQL"
+    ],
+    "statut": "En ligne",
+    "url": "/dojo-fuinjutsu/",
+    "public": true
   }
 ]

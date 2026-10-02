@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('./apps/police-suna/src/config/db');
 const police = require('./apps/police-suna');
+const dojo = require('./apps/dojo-fuinjutsu');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,6 +65,10 @@ app.use('/police-suna', (req, res, next) => {
 // police-suna complet, avec ses propres comptes (inchangés)
 app.get(/^\/police-suna$/, (req, res) => res.redirect('/police-suna/')); // le slash final garde les liens relatifs valides
 app.use('/police-suna', police.app);
+
+// Dojo de fuinjutsu : l'admin du hub y agit comme Maître
+app.get(/^\/dojo-fuinjutsu$/, (req, res) => res.redirect('/dojo-fuinjutsu/'));
+app.use('/dojo-fuinjutsu', (req, res, next) => { req.hubAdmin = isHub(req); next(); }, dojo.app);
 
 // ---------- Hub ----------
 app.use((req, res, next) => {
@@ -144,5 +149,6 @@ app.use((req, res) => res.redirect('/'));
 
 police.init()
   .then(chargerReglages)
+  .then(dojo.init)
   .then(() => app.listen(PORT, () => console.log(`[server] Hub + police-suna en ligne sur le port ${PORT}`)))
   .catch((err) => { console.error('[server] Échec du démarrage :', err); process.exit(1); });
