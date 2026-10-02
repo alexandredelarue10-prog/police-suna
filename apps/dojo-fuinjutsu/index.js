@@ -279,12 +279,15 @@ async function init() {
     CREATE TABLE IF NOT EXISTS dojo_carnet (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, texte TEXT NOT NULL, barriere INT DEFAULT 0, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_activite (id SERIAL PRIMARY KEY, membre_id INT, nom TEXT, action TEXT NOT NULL, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_reglement (id INT PRIMARY KEY, contenu TEXT DEFAULT '');`);
+  // Les barrières sont des techniques : la Verte est la plus petite, la Rouge la plus grande.
+  // Les textes déjà modifiés par le Maître ne sont jamais écrasés (seuls les anciens textes par défaut sont remplacés).
   await pool.query(`INSERT INTO dojo_barrieres (id, nom, couleur, description, exigences) VALUES
-    (1,'Barrière Verte','#4f9d4f','Premier cercle du dojo : les fondements du fuinjutsu. L''adepte apprend à tracer les sceaux de base, à doser son chakra et à sceller de simples objets.','Maîtriser le tracé des sceaux élémentaires et réussir un examen devant un Professeur.'),
-    (2,'Barrière Bleue','#3f7fd0','Deuxième cercle : le scellement du chakra et des éléments. L''élève stabilise des sceaux durables et commence à sceller des techniques adverses.','Avoir validé la Barrière Verte et démontré un contrôle de chakra constant.'),
-    (3,'Barrière Violette','#8a52c8','Troisième cercle : sceaux complexes, prisons et scellements à distance. Réservée aux élèves capables de travailler sans erreur sous pression.','Avoir validé la Barrière Bleue et présenté un sceau original à un Professeur.'),
-    (4,'Barrière Rouge','#c23b3b','Sommet de l''art : les scellements majeurs. Seuls les plus accomplis l''atteignent, sur validation d''un Co-Maître ou du Maître.','Avoir validé la Barrière Violette et obtenu l''accord d''un Co-Maître ou du Maître.')
-    ON CONFLICT (id) DO NOTHING`);
+    (1,'Barrière Verte','#4f9d4f','La plus petite des barrières. Une technique de scellement simple qui protège une zone réduite et résiste aux attaques légères. C''est la première technique que tout adepte apprend.','Tracer la barrière sans erreur et la maintenir devant un Professeur.'),
+    (2,'Barrière Bleue','#3f7fd0','Une barrière plus étendue et plus résistante que la Verte. Elle demande un contrôle de chakra soutenu pour être maintenue.','Maîtriser la Barrière Verte et soutenir la Bleue durablement.'),
+    (3,'Barrière Violette','#8a52c8','Une barrière puissante, capable de repousser ou d''enfermer des techniques de haut niveau. Sa maîtrise exige une précision parfaite.','Maîtriser la Barrière Bleue et démontrer sa précision sous pression.'),
+    (4,'Barrière Rouge','#c23b3b','La plus grande des barrières, sommet du fuinjutsu du dojo. Sa puissance et son coût en chakra sont immenses : seuls les plus accomplis y accèdent.','Maîtriser la Barrière Violette et obtenir l''accord d''un Co-Maître ou du Maître.')
+    ON CONFLICT (id) DO UPDATE SET description=EXCLUDED.description, exigences=EXCLUDED.exigences
+    WHERE dojo_barrieres.description LIKE ANY (ARRAY['Premier cercle%','Deuxième cercle%','Troisième cercle%','Sommet de l%'])`);
   await pool.query("INSERT INTO dojo_reglement (id, contenu) VALUES (1, 'Respect du Maître et de ses élèves.\nAucune technique de scellement ne s''utilise hors du dojo sans autorisation.\nChaque passage de barrière se fait sur examen.') ON CONFLICT (id) DO NOTHING");
 }
 

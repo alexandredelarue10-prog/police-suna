@@ -2,7 +2,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const GR = { adepte: 'Adepte', professeur: 'Professeur', comaitre: 'Co-Maître', maitre: 'Maître' };
 const NIV = { adepte: 1, professeur: 2, comaitre: 3, maitre: 4 };
-const BN = ['Sans barrière', 'Verte', 'Bleue', 'Violette', 'Rouge'];
+const BN = ['Aucune barrière maîtrisée', 'Verte', 'Bleue', 'Violette', 'Rouge'];
 const BC = ['#8a8070', '#4f9d4f', '#3f7fd0', '#8a52c8', '#c23b3b'];
 const DG = { faible: 'Faible', modere: 'Modéré', eleve: 'Élevé', interdit: 'Interdit' };
 const pill = (n) => `<span class="pill" style="--c:${BC[n]}">${n ? 'Barrière ' + BN[n] : BN[0]}</span>`;
@@ -31,15 +31,15 @@ const VUES = {
     return `<h1>Bienvenue, ${esc(moi.nom_rp)}</h1>
     <div class="card"><div class="row"><span class="pill" style="--c:#cba84c">${GR[moi.grade]}</span>${pill(moi.barriere)}</div>
       <div class="bars">${[1, 2, 3, 4].map((i) => `<i style="${i <= moi.barriere ? 'background:' + BC[i] : ''}" title="Barrière ${BN[i]}"></i>`).join('')}</div>
-      <div class="mut">${moi.barriere >= 4 ? 'Tu as atteint le sommet : la Barrière Rouge.' : 'Prochaine étape : Barrière ' + BN[moi.barriere + 1] + (moi.admin ? '' : ' — fais une demande dans « Examens ».')}</div></div>
+      <div class="mut">${moi.barriere >= 4 ? 'Tu maîtrises la plus grande des barrières : la Rouge.' : 'Prochaine technique à maîtriser : Barrière ' + BN[moi.barriere + 1] + (moi.admin ? '' : ' — fais une demande dans « Examens ».')}</div></div>
     <h2>Annonces</h2>${ann.slice(0, 4).map((a) => `<div class="card"><b>${a.epinglee ? '📌 ' : ''}${esc(a.titre)}</b><pre class="mut">${esc(a.contenu)}</pre></div>`).join('') || '<p class="mut">Aucune annonce.</p>'}
     <h2>Prochaines séances</h2>${next.map((s) => `<div class="card"><b>${esc(s.titre)}</b> — ${fmt(s.date_heure)} ${s.barriere_min ? pill(s.barriere_min) : ''}</div>`).join('') || '<p class="mut">Aucune séance prévue.</p>'}`;
   },
   async barrieres() {
     const b = await api('barrieres');
-    return `<h1>Les Barrières</h1><p class="mut">Technique principale du dojo : quatre cercles à franchir, du plus accessible au plus redoutable.</p><div class="grid">${b.map((x) => `<div class="card" style="border-top:3px solid ${x.couleur}">
-      <h3 style="color:${x.couleur}">${esc(x.nom)}</h3><pre>${esc(x.description)}</pre><p class="mut"><b>Pour la franchir :</b> ${esc(x.exigences)}</p>
-      <div class="mut">${x.membres} membre(s)</div>${maitre() ? `<button class="btn sm ghost" data-act="editBarriere" data-id="${x.id}" style="margin-top:8px">Modifier</button>` : ''}</div>`).join('')}</div>`;
+    return `<h1>Les Barrières</h1><p class="mut">Les barrières sont la technique principale du dojo : de la Verte, la plus petite, à la Rouge, la plus grande.</p><div class="grid">${b.map((x) => `<div class="card" style="border-top:3px solid ${x.couleur}">
+      <div class="mut">${['','La plus petite','Technique intermédiaire','Technique avancée','La plus grande'][x.id] || ''}</div><h3 style="color:${x.couleur}">${esc(x.nom)}</h3><pre>${esc(x.description)}</pre><p class="mut"><b>Pour la maîtriser :</b> ${esc(x.exigences)}</p>
+      <div class="mut">${x.membres} membre(s) la maîtrisent comme plus haute barrière</div>${maitre() ? `<button class="btn sm ghost" data-act="editBarriere" data-id="${x.id}" style="margin-top:8px">Modifier</button>` : ''}</div>`).join('')}</div>`;
   },
   async grimoire(f) {
     const t = await api('techniques'); const fl = Number(f.b || 0);
@@ -63,8 +63,8 @@ const VUES = {
   async examens() {
     const ex = await api('examens'); const next = moi.barriere + 1;
     const st = { en_attente: '⏳ En attente', accepte: '✅ Accepté', refuse: '❌ Refusé' };
-    return `<h1>Examens de barrière</h1>${!moi.admin ? (next > 4 ? '<p class="mut">Tu as atteint la Barrière Rouge.</p>' : `<div class="card"><h3>Demander la Barrière ${BN[next]}</h3>
-      <textarea id="exmsg" maxlength="500" placeholder="Explique pourquoi tu es prêt (techniques maîtrisées, entraînement…)"></textarea><button class="btn" data-act="demandeExamen">Envoyer la demande</button></div>`) : ''}
+    return `<h1>Examens de barrière</h1>${!moi.admin ? (next > 4 ? '<p class="mut">Tu as atteint la Barrière Rouge.</p>' : `<div class="card"><h3>Passer l'épreuve de la Barrière ${BN[next]}</h3>
+      <textarea id="exmsg" maxlength="500" placeholder="Explique pourquoi tu es prêt à présenter cette barrière (entraînement, difficultés surmontées…)"></textarea><button class="btn" data-act="demandeExamen">Envoyer la demande</button></div>`) : ''}
     <h2>${staff() ? 'Demandes' : 'Mes demandes'}</h2>${ex.map((e) => `<div class="card"><div class="row"><b>${staff() ? esc(e.nom_rp) + ' → ' : ''}</b>${pill(e.barriere_visee)}<span>${st[e.statut]}</span></div>
       <div class="mut">${fmt(e.cree_le)}${e.juge && e.statut !== 'en_attente' ? ' · jugé par ' + esc(e.juge) : ''}</div><pre>${esc(e.message)}</pre>${e.commentaire ? `<p class="mut"><b>Commentaire :</b> ${esc(e.commentaire)}</p>` : ''}
       ${staff() && e.statut === 'en_attente' && e.membre_id !== moi.id ? `<input id="c${e.id}" maxlength="500" placeholder="Commentaire (facultatif)"><div class="row"><button class="btn sm" data-act="juge" data-id="${e.id}" data-d="accepte">Valider</button><button class="btn sm red" data-act="juge" data-id="${e.id}" data-d="refuse">Refuser</button></div>` : ''}</div>`).join('') || '<p class="mut">Aucune demande.</p>'}`;
