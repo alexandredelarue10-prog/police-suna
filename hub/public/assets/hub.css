@@ -17,3 +17,11 @@ h1,h2{font-family:Oswald,'Arial Narrow',sans-serif;letter-spacing:.04em;margin:0
 .login h1{color:var(--or);font-size:26px;margin-bottom:6px}.login p{margin:0 0 20px;font-size:14px;opacity:.8}
 input{width:100%;padding:11px;border-radius:4px;border:1px solid #ffffff33;background:var(--nuit);color:var(--papier);font:inherit;margin-bottom:14px}
 .err{color:#e08a8a;font-size:14px;min-height:20px;margin-bottom:8px}
+.panel{background:var(--nuit2);border:1px solid #ffffff1a;border-radius:6px;padding:20px;margin-bottom:18px}
+.panel h2{font-size:18px;margin-bottom:12px;color:var(--or)}
+textarea{width:100%;min-height:70px;padding:11px;border-radius:4px;border:1px solid #ffffff33;background:var(--nuit);color:var(--papier);font:inherit;margin:10px 0;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.row input[type=checkbox]{width:auto;margin:0}.btn.danger{background:var(--sceau)}.msg{font-size:13px;color:var(--or)}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid #ffffff1a}
+.foot{margin-top:32px;font-size:12px;opacity:.5;text-align:center}.foot a{color:inherit}
+.bandeau{background:var(--or);color:var(--nuit);text-align:center;padding:10px 16px;font-weight:600}

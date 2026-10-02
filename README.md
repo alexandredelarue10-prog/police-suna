@@ -1,25 +1,12 @@
-# Hub privé + police-suna
+# Portfolio + admin + police-suna
 
-Le dépôt contient désormais **deux couches** :
+- **`/`** : page publique avec tes projets (`hub/projets.json`, champ `"public": false` pour en masquer un).
+- **`/admin`** : connexion par mot de passe (hash bcrypt dans `server.js`, remplaçable via `HUB_PASSWORD_HASH` sur Render). Permet de : fermer l'accès à police-suna (message de maintenance personnalisé, tu gardes l'accès), afficher un bandeau d'annonce, déconnecter tous les utilisateurs, voir les comptes et sessions actives.
+- **`/police-suna/`** : le site complet (`apps/police-suna/`), avec ses propres comptes.
 
-- **Hub privé** (`/`) : page protégée par mot de passe, d'où tu choisis le projet à ouvrir. La liste est dans `hub/projets.json` (servie uniquement après connexion).
-- **police-suna** (`/police-suna/`) : le site complet, inchangé, dans `apps/police-suna/`. Il garde ses propres comptes (DEV, etc.) pour que les membres du RP y accèdent directement.
+Réglages admin stockés dans la table `hub_settings`. `HUB_SESSION_SECRET` : chaîne aléatoire ; la changer déconnecte l'admin partout.
 
-## Variables d'environnement (Render)
-
-| Variable | Rôle |
-|---|---|
-| `DATABASE_URL`, `SESSION_SECRET`, `DISCORD_BOT_TOKEN`… | inchangées (police-suna) |
-| `HUB_PASSWORD_HASH` | hash bcrypt du mot de passe du hub : `npm run hub:hash -- "ton mot de passe"` |
-| `HUB_SESSION_SECRET` | chaîne aléatoire longue ; la changer déconnecte tous les appareils |
-
-Un hash bcrypt par défaut est dans `server.js` ; définir `HUB_PASSWORD_HASH` sur Render le remplace (pour changer le mot de passe).
-
-## Ajouter un projet
-
-Ajouter une entrée dans `hub/projets.json` (`id`, `nom`, `description`, `tags`, `statut`, `url`). Un site externe = une URL complète ; un site hébergé ici = un dossier dans `apps/` monté dans `server.js`.
-
-Le ping keep-alive (`/api/health`) et `npm start` ne changent pas.
+Ajouter un projet : une entrée dans `hub/projets.json` (`id`, `nom`, `description`, `tags`, `statut`, `url`, `public`).
 
 ---
 
