@@ -69,12 +69,17 @@ app.post('/api/connexion', h(async (req, res) => {
   if (!m || !(await bcrypt.compare(String(b.mot_de_passe || ''), m.mdp_hash))) { echec(req.ip); return bad(res, 401, 'Identifiant ou mot de passe incorrect.'); }
   if (m.statut === 'en_attente') return bad(res, 403, "Ton inscription n'a pas encore été validée par un Co-Maître ou le Maître.");
   if (m.statut === 'refuse') return bad(res, 403, 'Ton inscription a été refusée.');
+  await pool.query('UPDATE dojo_membres SET derniere_connexion=now() WHERE id=$1', [m.id]);
   const exp = Date.now() + DUREE;
   res.cookie('dojo.sid', `${m.id}.${exp}.${sig(m.id + '.' + exp)}`, { ...cookieOpts, maxAge: DUREE });
   res.json({ ok: true });
 }));
 app.post('/api/deconnexion', (req, res) => { res.clearCookie('dojo.sid', cookieOpts); res.json({ ok: true }); });
-app.get('/api/moi', (req, res) => res.json({ membre: req.membre }));
+app.get('/api/moi', h(async (req, res) => {
+  let en_attente = 0;
+  if (req.membre && niv(req.membre) >= 3) en_attente = (await pool.query("SELECT COUNT(*)::int AS n FROM dojo_membres WHERE statut='en_attente'")).rows[0].n;
+  res.json({ membre: req.membre, en_attente });
+}));
 app.get('/api/reglement', h(async (req, res) => res.json((await pool.query('SELECT contenu FROM dojo_reglement WHERE id=1')).rows[0] || { contenu: '' })));
 app.get('/api/barrieres', h(async (req, res) => {
   res.json((await pool.query(`SELECT b.*, (SELECT COUNT(*)::int FROM dojo_membres m WHERE m.statut='actif' AND m.barriere=b.id) AS membres FROM dojo_barrieres b ORDER BY id`)).rows);
@@ -124,18 +129,30 @@ app.delete('/api/techniques/:id', need(3), h(async (req, res) => { await pool.qu
 
 // ---- Membres ----
 app.get('/api/membres', h(async (req, res) => {
-  res.json((await pool.query(`SELECT m.id, m.username, m.nom_rp, m.grade, m.barriere, m.bio, m.cree_le,
+  const rows = (await pool.query(`SELECT m.id, m.username, m.nom_rp, m.grade, m.barriere, m.bio, m.cree_le, m.derniere_connexion,
     (SELECT COUNT(*)::int FROM dojo_inscriptions i WHERE i.membre_id=m.id AND i.present IS TRUE) AS presences,
     (SELECT COUNT(*)::int FROM dojo_inscriptions i WHERE i.membre_id=m.id AND i.present IS NOT NULL) AS appels
     FROM dojo_membres m WHERE m.statut='actif'
-    ORDER BY CASE m.grade WHEN 'maitre' THEN 4 WHEN 'comaitre' THEN 3 WHEN 'professeur' THEN 2 ELSE 1 END DESC, m.barriere DESC, m.nom_rp`)).rows);
+    ORDER BY CASE m.grade WHEN 'maitre' THEN 4 WHEN 'comaitre' THEN 3 WHEN 'professeur' THEN 2 ELSE 1 END DESC, m.barriere DESC, m.nom_rp`)).rows;
+  res.json(niv(req.membre) >= 3 ? rows : rows.map(({ derniere_connexion, ...r }) => r)); // dernière connexion : réservée aux Co-Maîtres et au Maître
 }));
 app.get('/api/membres/en-attente', need(3), h(async (req, res) => res.json((await pool.query("SELECT id, username, nom_rp, cree_le FROM dojo_membres WHERE statut='en_attente' ORDER BY cree_le")).rows)));
 app.post('/api/membres/:id/decision', need(3), h(async (req, res) => {
-  const d = (req.body || {}).decision; if (!['actif', 'refuse'].includes(d)) return bad(res, 400, 'Décision invalide.');
-  const r = await pool.query("UPDATE dojo_membres SET statut=$1 WHERE id=$2 AND statut='en_attente' RETURNING nom_rp", [d, Number(req.params.id)]);
+  const b = req.body || {}, d = b.decision;
+  if (!['actif', 'refuse'].includes(d)) return bad(res, 400, 'Décision invalide.');
+  let grade = 'adepte', barriere = 0;
+  if (d === 'actif') { // comme sur police-suna : le grade et la barrière se choisissent au moment de la validation
+    if (b.grade !== undefined) {
+      if (!GRADES[b.grade] || (niv(req.membre) < 4 && GRADES[b.grade] > 2)) return bad(res, 403, "Un Co-Maître ne peut accorder que jusqu'au rang de Professeur.");
+      grade = b.grade;
+    }
+    if (b.barriere !== undefined) { const n = Number(b.barriere); if (!(n >= 0 && n <= 4)) return bad(res, 400, 'Barrière invalide.'); barriere = n; }
+  }
+  const r = await pool.query(`UPDATE dojo_membres SET statut=$1::text, grade=CASE WHEN $1::text='actif' THEN $3::text ELSE grade END,
+    barriere=CASE WHEN $1::text='actif' THEN $4::int ELSE barriere END, valide_par=$5, valide_le=now()
+    WHERE id=$2 AND statut='en_attente' RETURNING nom_rp`, [d, Number(req.params.id), grade, barriere, req.membre.id]);
   if (!r.rowCount) return bad(res, 404, 'Demande introuvable.');
-  await log(req, (d === 'actif' ? 'Inscription acceptée : ' : 'Inscription refusée : ') + r.rows[0].nom_rp); res.json({ ok: true });
+  await log(req, (d === 'actif' ? `Inscription acceptée : ${r.rows[0].nom_rp} (${grade}, barrière ${barriere})` : 'Inscription refusée : ' + r.rows[0].nom_rp)); res.json({ ok: true });
 }));
 app.put('/api/membres/:id', need(3), h(async (req, res) => {
   const cible = (await pool.query("SELECT id, grade, nom_rp FROM dojo_membres WHERE id=$1 AND statut='actif'", [Number(req.params.id)])).rows[0];
@@ -278,7 +295,10 @@ async function init() {
     CREATE TABLE IF NOT EXISTS dojo_annonces (id SERIAL PRIMARY KEY, titre TEXT NOT NULL, contenu TEXT DEFAULT '', auteur_id INT, epinglee BOOLEAN DEFAULT FALSE, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_carnet (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, texte TEXT NOT NULL, barriere INT DEFAULT 0, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_activite (id SERIAL PRIMARY KEY, membre_id INT, nom TEXT, action TEXT NOT NULL, cree_le TIMESTAMPTZ DEFAULT now());
-    CREATE TABLE IF NOT EXISTS dojo_reglement (id INT PRIMARY KEY, contenu TEXT DEFAULT '');`);
+    CREATE TABLE IF NOT EXISTS dojo_reglement (id INT PRIMARY KEY, contenu TEXT DEFAULT '');
+    ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS valide_par INT;
+    ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS valide_le TIMESTAMPTZ;
+    ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS derniere_connexion TIMESTAMPTZ;`);
   // Les barrières sont des techniques : la Verte est la plus petite, la Rouge la plus grande.
   // Les textes déjà modifiés par le Maître ne sont jamais écrasés (seuls les anciens textes par défaut sont remplacés).
   await pool.query(`INSERT INTO dojo_barrieres (id, nom, couleur, description, exigences) VALUES

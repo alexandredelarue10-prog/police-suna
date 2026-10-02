@@ -103,8 +103,8 @@ const VUES = {
   async admin() {
     const [att, mem, act] = await Promise.all([api('membres/en-attente'), api('membres'), maitre() ? api('activite') : []]);
     return `<h1>Administration</h1><h2>Inscriptions en attente (${att.length})</h2>${att.map((x) => `<div class="card row"><b>${esc(x.nom_rp)}</b><span class="mut">@${esc(x.username)} · ${fmt(x.cree_le)}</span><span style="flex:1"></span>
-      <button class="btn sm" data-act="decision" data-id="${x.id}" data-d="actif">Accepter</button><button class="btn sm red" data-act="decision" data-id="${x.id}" data-d="refuse">Refuser</button></div>`).join('') || '<p class="mut">Aucune.</p>'}
-    <h2>Membres</h2>${mem.map((x) => { const lock = !maitre() && NIV[x.grade] >= NIV[moi.grade]; return `<div class="card"><div class="row"><b style="min-width:130px">${esc(x.nom_rp)}</b>
+      <select id="pg${x.id}">${opts(Object.entries(GR).filter(([k]) => maitre() || NIV[k] <= 2), 'adepte')}</select><select id="pb${x.id}">${barOpts(0)}</select><button class="btn sm" data-act="decision" data-id="${x.id}" data-d="actif">Accepter</button><button class="btn sm red" data-act="decision" data-id="${x.id}" data-d="refuse">Refuser</button></div>`).join('') || '<p class="mut">Aucune.</p>'}
+    <h2>Membres</h2>${mem.map((x) => { const lock = !maitre() && NIV[x.grade] >= NIV[moi.grade]; return `<div class="card"><div class="row"><b style="min-width:130px">${esc(x.nom_rp)}</b><span class="mut">${x.derniere_connexion ? 'Vu ' + fmt(x.derniere_connexion) : 'Jamais connecté'}</span>
       <select id="g${x.id}" ${lock ? 'disabled' : ''}>${opts(Object.entries(GR).filter(([k]) => maitre() || NIV[k] <= 2), x.grade)}</select><select id="b${x.id}" ${lock ? 'disabled' : ''}>${barOpts(x.barriere)}</select>
       ${lock ? '' : `<button class="btn sm" data-act="saveMembre" data-id="${x.id}">Enregistrer</button>`}${maitre() && x.id !== moi.id ? `<button class="btn sm red" data-act="delMembre" data-id="${x.id}">Supprimer</button>` : ''}</div></div>`; }).join('')}
     ${maitre() ? `<h2>Journal d'activité</h2><div class="card"><table>${act.map((a) => `<tr><td class="mut">${fmt(a.cree_le)}</td><td>${esc(a.nom || '')}</td><td>${esc(a.action)}</td></tr>`).join('')}</table></div>` : ''}`;
@@ -118,11 +118,12 @@ const VUES = {
 const NAV = [['accueil', 'Accueil'], ['barrieres', 'Barrières'], ['grimoire', 'Grimoire'], ['seances', 'Séances'], ['examens', 'Examens'], ['membres', 'Membres'], ['annonces', 'Annonces'], ['carnet', 'Carnet'], ['stats', 'Stats'], ['reglement', 'Règlement']];
 
 function topbar(cur) {
-  const nav = [...NAV, ...(co() ? [['admin', 'Admin']] : [])];
+  const nav = [...NAV, ...(co() ? [['admin', 'Admin' + (moi.en_attente ? ` (${moi.en_attente})` : '')]] : [])];
   $('#top').innerHTML = `<span class="logo">封 Dojo de Fuinjutsu</span>${nav.map(([k, l]) => `<a href="#/${k}" class="${k === cur ? 'on' : ''}">${l}</a>`).join('')}<span class="sp"></span><a href="#/profil">${esc(moi.nom_rp)}</a>${moi.admin ? '' : '<a href="#" data-act="logout">Déconnexion</a>'}`;
 }
 async function route() {
   if (!moi) return;
+  if (co()) { await refreshMoi(); if (!moi) return authScreen(); }
   const [p, qs] = (location.hash.slice(2) || 'accueil').split('?'); const f = Object.fromEntries(new URLSearchParams(qs || ''));
   const v = VUES[p] ? p : 'accueil'; topbar(v);
   try { $('#app').innerHTML = await VUES[v](f); } catch (e) { $('#app').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -135,8 +136,9 @@ function authScreen() {
     <div id="f-reg" hidden><label>Identifiant</label><input id="ru" maxlength="24" autocomplete="username"><label>Nom RP</label><input id="rn" maxlength="40"><label>Mot de passe (8 caractères min.)</label><input id="rp" type="password" autocomplete="new-password">
       <div class="err" id="re"></div><button class="btn" data-act="register">Demander mon admission</button><p class="mut">Ton inscription sera validée par un Co-Maître ou le Maître.</p></div></div>`;
 }
+async function refreshMoi() { try { const d = await api('moi'); moi = d.membre; if (moi) moi.en_attente = d.en_attente || 0; } catch { moi = null; } }
 async function boot() {
-  try { moi = (await api('moi')).membre; } catch { moi = null; }
+  await refreshMoi();
   if (!moi) return authScreen();
   if (!location.hash) location.hash = '#/accueil'; route();
 }
@@ -172,7 +174,7 @@ const ACTS = {
   async postCarnet() { await api('carnet', 'POST', { texte: $('#ct').value }); route(); },
   async delCarnet(el) { await api('carnet/' + el.dataset.id, 'DELETE'); route(); },
   async saveReglement() { await api('reglement', 'PUT', { contenu: $('#rg').value }); route(); },
-  async decision(el) { await api('membres/' + el.dataset.id + '/decision', 'POST', { decision: el.dataset.d }); route(); },
+  async decision(el) { const i = el.dataset.id, a = el.dataset.d === 'actif'; await api('membres/' + i + '/decision', 'POST', { decision: el.dataset.d, grade: a ? $('#pg' + i).value : undefined, barriere: a ? $('#pb' + i).value : undefined }); route(); },
   async saveMembre(el) { const i = el.dataset.id; await api('membres/' + i, 'PUT', { grade: $('#g' + i).value, barriere: $('#b' + i).value }); route(); },
   async delMembre(el) { if (confirm('Supprimer définitivement ce membre ?')) { await api('membres/' + el.dataset.id, 'DELETE'); route(); } },
   async saveProfil() { await api('moi', 'PUT', { nom_rp: $('#pn').value, bio: $('#pb').value, mot_de_passe: $('#pp').value }); moi = (await api('moi')).membre; alert('Profil enregistré.'); route(); },
