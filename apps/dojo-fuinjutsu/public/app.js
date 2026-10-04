@@ -75,7 +75,7 @@ const VUES = {
     return `<h1>Registre du dojo</h1><div class="row" style="margin-bottom:14px"><input id="fq" placeholder="Rechercher un nom…" value="${esc(f.q || '')}">
       <select id="fg"><option value="">Tous les grades</option>${opts(Object.entries(GR), g)}</select><select id="fbm"><option value="">Toutes barrières</option>${barOpts(b)}</select></div>
     <p class="mut">${l.length} membre(s)</p><div class="grid">${l.map((x) => `<div class="card"><b>${esc(x.nom_rp)}</b><div class="row" style="margin:6px 0"><span class="pill" style="--c:#cba84c">${GR[x.grade]}</span>${pill(x.barriere)}</div>
-      <pre class="mut">${esc(x.bio)}</pre><div class="mut" style="margin-top:6px">Assiduité : ${x.appels ? x.presences + '/' + x.appels + ' séances' : '—'}</div></div>`).join('')}</div>`;
+      <pre class="mut">${esc(x.bio)}</pre><div class="mut" style="margin-top:6px">Assiduité : ${x.appels ? x.presences + '/' + x.appels + ' séances' : '—'}</div><button class="btn sm ghost" data-act="profilMembre" data-id="${x.id}" style="margin-top:8px">Voir le profil</button></div>`).join('')}</div>`;
   },
   async annonces() {
     const a = await api('annonces');
@@ -101,12 +101,13 @@ const VUES = {
     return `<h1>Règlement du dojo</h1><div class="card"><pre>${esc(r.contenu)}</pre></div>${maitre() ? `<div class="card"><textarea id="rg" maxlength="10000" style="min-height:160px">${esc(r.contenu)}</textarea><button class="btn" data-act="saveReglement">Enregistrer</button></div>` : ''}`;
   },
   async admin() {
-    const [att, mem, act] = await Promise.all([api('membres/en-attente'), api('membres'), maitre() ? api('activite') : []]);
+    const [att, mem, act, sus] = await Promise.all([api('membres/en-attente'), api('membres'), maitre() ? api('activite') : [], api('membres/suspendus')]);
     return `<h1>Administration</h1><h2>Inscriptions en attente (${att.length})</h2>${att.map((x) => `<div class="card row"><b>${esc(x.nom_rp)}</b><span class="mut">@${esc(x.username)} · ${fmt(x.cree_le)}</span><span style="flex:1"></span>
       <select id="pg${x.id}">${opts(Object.entries(GR).filter(([k]) => maitre() || NIV[k] <= 2), 'adepte')}</select><select id="pb${x.id}">${barOpts(0)}</select><button class="btn sm" data-act="decision" data-id="${x.id}" data-d="actif">Accepter</button><button class="btn sm red" data-act="decision" data-id="${x.id}" data-d="refuse">Refuser</button></div>`).join('') || '<p class="mut">Aucune.</p>'}
-    <h2>Membres</h2>${mem.map((x) => { const lock = !maitre() && NIV[x.grade] >= NIV[moi.grade]; return `<div class="card"><div class="row"><b style="min-width:130px">${esc(x.nom_rp)}</b><span class="mut">${x.derniere_connexion ? 'Vu ' + fmt(x.derniere_connexion) : 'Jamais connecté'}</span>
+    <h2>Membres</h2><a class="btn ghost sm" href="api/export/membres.csv" style="margin-bottom:12px">Exporter les membres (CSV)</a>${mem.map((x) => { const lock = !maitre() && NIV[x.grade] >= NIV[moi.grade]; return `<div class="card"><div class="row"><b style="min-width:130px">${esc(x.nom_rp)}</b><span class="mut">${x.derniere_connexion ? 'Vu ' + fmt(x.derniere_connexion) : 'Jamais connecté'}</span>
       <select id="g${x.id}" ${lock ? 'disabled' : ''}>${opts(Object.entries(GR).filter(([k]) => maitre() || NIV[k] <= 2), x.grade)}</select><select id="b${x.id}" ${lock ? 'disabled' : ''}>${barOpts(x.barriere)}</select>
-      ${lock ? '' : `<button class="btn sm" data-act="saveMembre" data-id="${x.id}">Enregistrer</button>`}${maitre() && x.id !== moi.id ? `<button class="btn sm red" data-act="delMembre" data-id="${x.id}">Supprimer</button>` : ''}</div></div>`; }).join('')}
+      ${lock ? '' : `<button class="btn sm" data-act="saveMembre" data-id="${x.id}">Enregistrer</button>`}${!lock && x.id !== moi.id ? `<button class="btn sm ghost" data-act="suspendre" data-id="${x.id}" data-s="1">Suspendre</button>` : ''}${maitre() && x.id !== moi.id ? `<button class="btn sm red" data-act="delMembre" data-id="${x.id}">Supprimer</button>` : ''}</div></div>`; }).join('')}
+    ${sus.length ? `<h2>Suspendus</h2>${sus.map((x) => `<div class="card row"><b>${esc(x.nom_rp)}</b><span class="mut">${GR[x.grade]}</span><span style="flex:1"></span><button class="btn sm" data-act="suspendre" data-id="${x.id}" data-s="0">Réactiver</button></div>`).join('')}` : ''}
     ${maitre() ? `<h2>Journal d'activité</h2><div class="card"><table>${act.map((a) => `<tr><td class="mut">${fmt(a.cree_le)}</td><td>${esc(a.nom || '')}</td><td>${esc(a.action)}</td></tr>`).join('')}</table></div>` : ''}`;
   },
   async profil() {
@@ -115,15 +116,29 @@ const VUES = {
       <label>Nouveau mot de passe (laisser vide pour ne pas changer)</label><input id="pp" type="password" autocomplete="new-password"><button class="btn" data-act="saveProfil">Enregistrer</button></div>`;
   },
 };
+VUES.notifications = async () => {
+  if (moi.admin) return '<h1>Notifications</h1><p class="mut">Aucune notification pour le compte administrateur.</p>';
+  const n = await api('notifs');
+  if (n.some((x) => !x.lue)) { await api('notifs/lues', 'POST', {}); moi.notifs = 0; topbar('notifications'); }
+  return `<h1>Notifications</h1>${n.map((x) => `<div class="card" style="${x.lue ? '' : 'border-color:var(--or)'}">${esc(x.texte)}<div class="mut">${fmt(x.cree_le)}</div></div>`).join('') || '<p class="mut">Rien pour le moment.</p>'}`;
+};
+VUES.recherche = async (f) => {
+  const q = (f.q || '').trim();
+  if (q.length < 2) return '<h1>Recherche</h1><p class="mut">Tape au moins 2 caractères dans la barre du haut.</p>';
+  const r = await api('recherche?q=' + encodeURIComponent(q));
+  return `<h1>Résultats pour « ${esc(q)} »</h1><h2>Membres</h2>${r.membres.map((m) => `<div class="card row"><b>${esc(m.nom_rp)}</b><span class="pill" style="--c:#cba84c">${GR[m.grade]}</span>${pill(m.barriere)}<span style="flex:1"></span><button class="btn sm ghost" data-act="profilMembre" data-id="${m.id}">Profil</button></div>`).join('') || '<p class="mut">Aucun.</p>'}
+  <h2>Techniques</h2>${r.techniques.map((t) => `<div class="card ${t.verrouille ? 'locked' : ''}"><b>${t.verrouille ? '🔒 ' : ''}${esc(t.nom)}</b> ${pill(t.barriere_requise)}${t.verrouille ? '' : `<pre class="mut">${esc((t.description || '').slice(0, 200))}</pre>`}</div>`).join('') || '<p class="mut">Aucune.</p>'}
+  <h2>Annonces</h2>${r.annonces.map((a) => `<div class="card"><b>${esc(a.titre)}</b><pre class="mut">${esc(a.extrait)}</pre></div>`).join('') || '<p class="mut">Aucune.</p>'}`;
+};
 const NAV = [['accueil', 'Accueil'], ['barrieres', 'Barrières'], ['grimoire', 'Grimoire'], ['seances', 'Séances'], ['examens', 'Examens'], ['membres', 'Membres'], ['annonces', 'Annonces'], ['carnet', 'Carnet'], ['stats', 'Stats'], ['reglement', 'Règlement']];
 
 function topbar(cur) {
   const nav = [...NAV, ...(co() ? [['admin', 'Admin' + (moi.en_attente ? ` (${moi.en_attente})` : '')]] : [])];
-  $('#top').innerHTML = `<span class="logo">封 Dojo de Fuinjutsu</span>${nav.map(([k, l]) => `<a href="#/${k}" class="${k === cur ? 'on' : ''}">${l}</a>`).join('')}<span class="sp"></span><a href="#/profil">${esc(moi.nom_rp)}</a>${moi.admin ? '' : '<a href="#" data-act="logout">Déconnexion</a>'}`;
+  $('#top').innerHTML = `<span class="logo">封 Dojo de Fuinjutsu</span>${nav.map(([k, l]) => `<a href="#/${k}" class="${k === cur ? 'on' : ''}">${l}</a>`).join('')}<span class="sp"></span><input id="gs" placeholder="Rechercher…" style="width:150px;margin:0" maxlength="60"><a href="#/notifications">🔔${moi.notifs ? ' ' + moi.notifs : ''}</a><a href="#/profil">${esc(moi.nom_rp)}</a>${moi.admin ? '' : '<a href="#" data-act="logout">Déconnexion</a>'}`;
 }
 async function route() {
   if (!moi) return;
-  if (co()) { await refreshMoi(); if (!moi) return authScreen(); }
+  await refreshMoi(); if (!moi) return authScreen();
   const [p, qs] = (location.hash.slice(2) || 'accueil').split('?'); const f = Object.fromEntries(new URLSearchParams(qs || ''));
   const v = VUES[p] ? p : 'accueil'; topbar(v);
   try { $('#app').innerHTML = await VUES[v](f); } catch (e) { $('#app').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -136,7 +151,7 @@ function authScreen() {
     <div id="f-reg" hidden><label>Identifiant</label><input id="ru" maxlength="24" autocomplete="username"><label>Nom RP</label><input id="rn" maxlength="40"><label>Mot de passe (8 caractères min.)</label><input id="rp" type="password" autocomplete="new-password">
       <div class="err" id="re"></div><button class="btn" data-act="register">Demander mon admission</button><p class="mut">Ton inscription sera validée par un Co-Maître ou le Maître.</p></div></div>`;
 }
-async function refreshMoi() { try { const d = await api('moi'); moi = d.membre; if (moi) moi.en_attente = d.en_attente || 0; } catch { moi = null; } }
+async function refreshMoi() { try { const d = await api('moi'); moi = d.membre; if (moi) { moi.en_attente = d.en_attente || 0; moi.notifs = d.notifs || 0; } } catch { moi = null; } }
 async function boot() {
   await refreshMoi();
   if (!moi) return authScreen();
@@ -161,8 +176,8 @@ const ACTS = {
   async saveTech(el) { const b = { nom: $('#tn').value, barriere_requise: $('#tb').value, danger: $('#td').value, description: $('#tx').value, composantes: $('#tc').value }; el.dataset.id ? await api('techniques/' + el.dataset.id, 'PUT', b) : await api('techniques', 'POST', b); closeModal(); route(); },
   async delTech(el) { if (confirm('Supprimer cette technique ?')) { await api('techniques/' + el.dataset.id, 'DELETE'); route(); } },
   formSeance() { modal(`<h3>Nouvelle séance</h3><input id="st" maxlength="100" placeholder="Titre"><input id="sd" type="datetime-local"><input id="sl" placeholder="Lieu"><textarea id="sx" placeholder="Description"></textarea>
-    <div class="row"><div><label>Barrière minimale</label><select id="sb">${barOpts(0)}</select></div><div><label>Places (0 = illimité)</label><input id="sc" type="number" min="0" value="0"></div></div><button class="btn" data-act="saveSeance">Créer</button>`); },
-  async saveSeance() { if (!$('#sd').value) return alert('Date requise.'); await api('seances', 'POST', { titre: $('#st').value, date_heure: new Date($('#sd').value).toISOString(), lieu: $('#sl').value, description: $('#sx').value, barriere_min: $('#sb').value, capacite: $('#sc').value }); closeModal(); route(); },
+    <div class="row"><div><label>Barrière minimale</label><select id="sb">${barOpts(0)}</select></div><div><label>Places (0 = illimité)</label><input id="sc" type="number" min="0" value="0"></div><div><label>Répéter chaque semaine (1 à 12)</label><input id="sr" type="number" min="1" max="12" value="1"></div></div><button class="btn" data-act="saveSeance">Créer</button>`); },
+  async saveSeance() { if (!$('#sd').value) return alert('Date requise.'); await api('seances', 'POST', { titre: $('#st').value, date_heure: new Date($('#sd').value).toISOString(), lieu: $('#sl').value, description: $('#sx').value, barriere_min: $('#sb').value, capacite: $('#sc').value, repetitions: $('#sr').value }); closeModal(); route(); },
   async delSeance(el) { if (confirm('Supprimer cette séance ?')) { await api('seances/' + el.dataset.id, 'DELETE'); route(); } },
   async inscr(el) { await api('seances/' + el.dataset.id + '/inscription', 'POST', {}); route(); },
   async appel(el) { const l = await api('seances/' + el.dataset.id + '/inscrits'); modal(`<h3>Feuille d'appel</h3>${l.map((m) => `<label class="row" style="color:var(--txt)"><input type="checkbox" class="pr" value="${m.id}" ${m.present ? 'checked' : ''} style="width:auto"> ${esc(m.nom_rp)} ${pill(m.barriere)}</label>`).join('') || '<p class="mut">Aucun inscrit.</p>'}<button class="btn" data-act="saveAppel" data-id="${el.dataset.id}">Valider l'appel</button>`); },
@@ -177,12 +192,24 @@ const ACTS = {
   async decision(el) { const i = el.dataset.id, a = el.dataset.d === 'actif'; await api('membres/' + i + '/decision', 'POST', { decision: el.dataset.d, grade: a ? $('#pg' + i).value : undefined, barriere: a ? $('#pb' + i).value : undefined }); route(); },
   async saveMembre(el) { const i = el.dataset.id; await api('membres/' + i, 'PUT', { grade: $('#g' + i).value, barriere: $('#b' + i).value }); route(); },
   async delMembre(el) { if (confirm('Supprimer définitivement ce membre ?')) { await api('membres/' + el.dataset.id, 'DELETE'); route(); } },
+  async profilMembre(el) {
+    const d = await api('membres/' + el.dataset.id), m = d.membre;
+    modal(`<h3>${esc(m.nom_rp)}</h3><div class="row"><span class="pill" style="--c:#cba84c">${GR[m.grade]}</span>${pill(m.barriere)}</div><pre class="mut" style="margin:8px 0">${esc(m.bio)}</pre>
+      <div class="mut">Membre depuis le ${new Date(m.cree_le).toLocaleDateString('fr-FR')} · Assiduité : ${d.appels ? d.presences + '/' + d.appels : '—'}${m.derniere_connexion ? ' · Vu ' + fmt(m.derniere_connexion) : ''}</div>
+      <h3 style="margin-top:12px">Distinctions</h3><div class="row">${d.badges.map((b) => `<span class="pill" style="--c:#cba84c" title="${esc(b.desc)}">${b.icone} ${esc(b.nom)}</span>`).join('') || '<span class="mut">Aucune pour le moment.</span>'}</div>
+      <h3 style="margin-top:12px">Progression</h3>${d.progres.map((p) => `<div class="mut">${new Date(p.date).toLocaleDateString('fr-FR')} — ${pill(p.barriere)}</div>`).join('') || '<span class="mut">Aucune barrière validée.</span>'}
+      ${d.evaluations.length || d.peutEvaluer ? `<h3 style="margin-top:12px">Retours des professeurs</h3>${d.evaluations.map((e) => `<div class="card"><div class="mut">${esc(e.auteur_nom)} · ${fmt(e.cree_le)}${e.note ? ' · ' + '★'.repeat(e.note) : ''}</div><pre>${esc(e.texte)}</pre>${staff() && (e.auteur_id === moi.id || co()) ? `<button class="btn sm ghost" data-act="delEval" data-id="${e.id}" data-m="${m.id}">Supprimer</button>` : ''}</div>`).join('')}
+        ${d.peutEvaluer ? `<textarea id="ev" maxlength="1000" placeholder="Ajouter un retour pédagogique"></textarea><div class="row"><select id="evn"><option value="">Sans note</option>${[1, 2, 3, 4, 5].map((n) => `<option>${n}</option>`).join('')}</select><button class="btn sm" data-act="addEval" data-id="${m.id}">Ajouter</button></div>` : ''}` : ''}`);
+  },
+  async addEval(el) { await api('membres/' + el.dataset.id + '/evaluations', 'POST', { texte: $('#ev').value, note: $('#evn').value }); ACTS.profilMembre({ dataset: { id: el.dataset.id } }); },
+  async delEval(el) { await api('evaluations/' + el.dataset.id, 'DELETE'); ACTS.profilMembre({ dataset: { id: el.dataset.m } }); },
+  async suspendre(el) { const s = el.dataset.s === '1'; if (s && !confirm('Suspendre ce membre ? Il sera déconnecté et ne pourra plus se connecter.')) return; await api('membres/' + el.dataset.id + '/suspension', 'PUT', { suspendu: s }); route(); },
   async saveProfil() { await api('moi', 'PUT', { nom_rp: $('#pn').value, bio: $('#pb').value, mot_de_passe: $('#pp').value }); moi = (await api('moi')).membre; alert('Profil enregistré.'); route(); },
 };
 document.addEventListener('click', (e) => { const el = e.target.closest('[data-act]'); if (!el || el.tagName === 'SELECT') return; e.preventDefault(); const f = ACTS[el.dataset.act]; if (f) run(() => f(el)); });
 document.addEventListener('change', (e) => { const el = e.target; if (el.dataset && el.dataset.act === 'filtreGrimoire') ACTS.filtreGrimoire(el); if (['fg', 'fbm'].includes(el.id)) filtreMembres(); });
 document.addEventListener('input', (e) => { if (e.target.id === 'fq') { clearTimeout(window._t); window._t = setTimeout(filtreMembres, 250); } });
-document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && ['lu', 'lp'].includes(e.target.id)) ACTS.login(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && ['lu', 'lp'].includes(e.target.id)) ACTS.login(); if (e.key === 'Enter' && e.target.id === 'gs' && e.target.value.trim()) location.hash = '#/recherche?q=' + encodeURIComponent(e.target.value.trim()); });
 function filtreMembres() { window._refocus = document.activeElement && document.activeElement.id === 'fq'; const p = new URLSearchParams({ q: $('#fq').value, g: $('#fg').value, b: $('#fbm').value }); location.hash = '#/membres?' + p; }
 window.addEventListener('hashchange', route);
 boot();

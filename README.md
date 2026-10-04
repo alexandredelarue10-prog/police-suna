@@ -2,7 +2,7 @@
 
 - **`/`** : page publique avec tes projets (`hub/projets.json`, champ `"public": false` pour en masquer un).
 - **`/admin`** : connexion par mot de passe (hash bcrypt dans `server.js`, remplaçable via `HUB_PASSWORD_HASH` sur Render). Permet de : fermer chaque site séparément (police-suna, dojo…) avec un message personnalisé, tu gardes l'accès, afficher un bandeau d'annonce, déconnecter tous les utilisateurs, voir les comptes et sessions actives.
-- **`/dojo-fuinjutsu/`** : site RP du dojo de fuinjutsu (`apps/dojo-fuinjutsu/`) : grades Maître / Co-Maître / Professeur / Adepte, quatre Barrières, grimoire, examens, séances avec appel, annonces, carnet, stats. Le compte admin du hub y agit comme Maître (il valide les premiers comptes).
+- **`/dojo-fuinjutsu/`** : site RP du dojo de fuinjutsu (`apps/dojo-fuinjutsu/`) : grades Maître / Co-Maître / Professeur / Adepte, quatre Barrières, grimoire, examens, séances (récurrentes) avec appel, annonces, carnet, notifications, profils avec distinctions et retours des professeurs, recherche, suspension de comptes, export CSV, stats. Le compte admin du hub y agit comme Maître (il valide les premiers comptes).
 - **`/police-suna/`** : le site complet (`apps/police-suna/`), avec ses propres comptes.
 
 Réglages admin stockés dans la table `hub_settings`. `HUB_SESSION_SECRET` : chaîne aléatoire ; la changer déconnecte l'admin partout.

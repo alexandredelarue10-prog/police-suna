@@ -15,6 +15,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '32kb' }));
 
+const LABEL = { adepte: 'Adepte', professeur: 'Professeur', comaitre: 'Co-Maître', maitre: 'Maître' };
 const GRADES = { adepte: 1, professeur: 2, comaitre: 3, maitre: 4 };
 const DANGERS = ['faible', 'modere', 'eleve', 'interdit'];
 const SECRET = process.env.DOJO_SESSION_SECRET || process.env.SESSION_SECRET || 'dev-secret-a-changer';
@@ -26,6 +27,9 @@ const h = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const txt = (v, max) => String(v ?? '').trim().slice(0, max);
 const niv = (m) => GRADES[m.grade] || 0;
 const bad = (res, code, error) => res.status(code).json({ error });
+const BNOM = ['', 'Verte', 'Bleue', 'Violette', 'Rouge'];
+const notifier = (id, texte) => (id > 0 ? pool.query('INSERT INTO dojo_notifs (membre_id, texte) VALUES ($1,$2)', [id, texte]).catch(() => {}) : null);
+const progres = (id, n, par, source) => (n > 0 ? pool.query('INSERT INTO dojo_progres (membre_id, barriere, valide_par, source) VALUES ($1,$2,$3,$4)', [id, n, par, source]).catch(() => {}) : null);
 const log = (req, action) => pool.query('INSERT INTO dojo_activite (membre_id, nom, action) VALUES ($1,$2,$3)', [req.membre.id, req.membre.nom_rp, action]).catch(() => {});
 
 // ---- Authentification (cookie signé ; le compte admin du hub agit comme Maître) ----
@@ -69,6 +73,7 @@ app.post('/api/connexion', h(async (req, res) => {
   if (!m || !(await bcrypt.compare(String(b.mot_de_passe || ''), m.mdp_hash))) { echec(req.ip); return bad(res, 401, 'Identifiant ou mot de passe incorrect.'); }
   if (m.statut === 'en_attente') return bad(res, 403, "Ton inscription n'a pas encore été validée par un Co-Maître ou le Maître.");
   if (m.statut === 'refuse') return bad(res, 403, 'Ton inscription a été refusée.');
+  if (m.statut === 'suspendu') return bad(res, 403, 'Ton compte est suspendu. Contacte un Co-Maître ou le Maître.');
   await pool.query('UPDATE dojo_membres SET derniere_connexion=now() WHERE id=$1', [m.id]);
   const exp = Date.now() + DUREE;
   res.cookie('dojo.sid', `${m.id}.${exp}.${sig(m.id + '.' + exp)}`, { ...cookieOpts, maxAge: DUREE });
@@ -78,7 +83,8 @@ app.post('/api/deconnexion', (req, res) => { res.clearCookie('dojo.sid', cookieO
 app.get('/api/moi', h(async (req, res) => {
   let en_attente = 0;
   if (req.membre && niv(req.membre) >= 3) en_attente = (await pool.query("SELECT COUNT(*)::int AS n FROM dojo_membres WHERE statut='en_attente'")).rows[0].n;
-  res.json({ membre: req.membre, en_attente });
+  const notifs = req.membre && req.membre.id > 0 ? (await pool.query('SELECT COUNT(*)::int AS n FROM dojo_notifs WHERE membre_id=$1 AND NOT lue', [req.membre.id])).rows[0].n : 0;
+  res.json({ membre: req.membre, en_attente, notifs });
 }));
 app.get('/api/reglement', h(async (req, res) => res.json((await pool.query('SELECT contenu FROM dojo_reglement WHERE id=1')).rows[0] || { contenu: '' })));
 app.get('/api/barrieres', h(async (req, res) => {
@@ -137,6 +143,75 @@ app.get('/api/membres', h(async (req, res) => {
   res.json(niv(req.membre) >= 3 ? rows : rows.map(({ derniere_connexion, ...r }) => r)); // dernière connexion : réservée aux Co-Maîtres et au Maître
 }));
 app.get('/api/membres/en-attente', need(3), h(async (req, res) => res.json((await pool.query("SELECT id, username, nom_rp, cree_le FROM dojo_membres WHERE statut='en_attente' ORDER BY cree_le")).rows)));
+app.get('/api/membres/suspendus', need(3), h(async (req, res) => res.json((await pool.query("SELECT id, nom_rp, grade FROM dojo_membres WHERE statut='suspendu' ORDER BY nom_rp")).rows)));
+const badges = (m, st) => {
+  const b = [];
+  if (m.barriere >= 1) b.push({ icone: '🟢', nom: 'Première barrière', desc: 'A maîtrisé la Barrière Verte' });
+  if (m.barriere >= 3) b.push({ icone: '🟣', nom: 'Sceaux avancés', desc: 'A maîtrisé la Barrière Violette' });
+  if (m.barriere >= 4) b.push({ icone: '🔴', nom: 'Maître des barrières', desc: 'A maîtrisé la Barrière Rouge, la plus grande' });
+  if (st.presences >= 5) b.push({ icone: '📜', nom: 'Assidu', desc: '5 séances ou plus suivies' });
+  if (st.presences >= 20) b.push({ icone: '🏯', nom: 'Pilier du dojo', desc: '20 séances ou plus suivies' });
+  if (NIV_OF(m.grade) >= 2) b.push({ icone: '🎓', nom: 'Enseignant', desc: 'Transmet son savoir au dojo' });
+  return b;
+};
+const NIV_OF = (g) => GRADES[g] || 0;
+app.get('/api/membres/:id', h(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return bad(res, 404, 'Membre introuvable.');
+  const m = (await pool.query("SELECT id, nom_rp, grade, barriere, bio, cree_le, derniere_connexion FROM dojo_membres WHERE id=$1 AND statut='actif'", [id])).rows[0];
+  if (!m) return bad(res, 404, 'Membre introuvable.');
+  const st = (await pool.query('SELECT COUNT(*) FILTER (WHERE present IS TRUE)::int AS presences, COUNT(*) FILTER (WHERE present IS NOT NULL)::int AS appels FROM dojo_inscriptions WHERE membre_id=$1', [id])).rows[0];
+  const prog = (await pool.query('SELECT barriere, date, source FROM dojo_progres WHERE membre_id=$1 ORDER BY date', [id])).rows;
+  const voir = niv(req.membre) >= 2 || id === req.membre.id;
+  const evaluations = voir ? (await pool.query('SELECT id, auteur_id, auteur_nom, texte, note, cree_le FROM dojo_evaluations WHERE membre_id=$1 ORDER BY cree_le DESC', [id])).rows : [];
+  if (niv(req.membre) < 3) delete m.derniere_connexion;
+  res.json({ membre: m, ...st, progres: prog, badges: badges(m, st), evaluations, peutEvaluer: niv(req.membre) >= 2 && id !== req.membre.id });
+}));
+app.post('/api/membres/:id/evaluations', need(2), h(async (req, res) => {
+  const id = Number(req.params.id), b = req.body || {}, t = txt(b.texte, 1000);
+  if (id === req.membre.id) return bad(res, 403, 'Tu ne peux pas t\'évaluer toi-même.');
+  if (!t) return bad(res, 400, 'Texte requis.');
+  const note = b.note ? Number(b.note) : null;
+  if (note !== null && !(note >= 1 && note <= 5)) return bad(res, 400, 'Note de 1 à 5.');
+  if (!(await pool.query("SELECT 1 FROM dojo_membres WHERE id=$1 AND statut='actif'", [id])).rowCount) return bad(res, 404, 'Membre introuvable.');
+  await pool.query('INSERT INTO dojo_evaluations (membre_id, auteur_id, auteur_nom, texte, note) VALUES ($1,$2,$3,$4,$5)', [id, req.membre.id, req.membre.nom_rp, t, note]);
+  await notifier(id, `Un professeur a ajouté un retour sur ta progression (${req.membre.nom_rp}).`); res.json({ ok: true });
+}));
+app.delete('/api/evaluations/:id', need(2), h(async (req, res) => {
+  const e = (await pool.query('SELECT auteur_id FROM dojo_evaluations WHERE id=$1', [Number(req.params.id)])).rows[0];
+  if (e && e.auteur_id !== req.membre.id && niv(req.membre) < 3) return bad(res, 403, 'Seul l\'auteur ou un Co-Maître peut la supprimer.');
+  await pool.query('DELETE FROM dojo_evaluations WHERE id=$1', [Number(req.params.id)]); res.json({ ok: true });
+}));
+app.put('/api/membres/:id/suspension', need(3), h(async (req, res) => {
+  const id = Number(req.params.id), susp = !!(req.body || {}).suspendu;
+  const c = (await pool.query("SELECT grade, nom_rp FROM dojo_membres WHERE id=$1 AND statut IN ('actif','suspendu')", [id])).rows[0];
+  if (!c) return bad(res, 404, 'Membre introuvable.');
+  if (id === req.membre.id) return bad(res, 400, 'Tu ne peux pas te suspendre toi-même.');
+  if (niv(req.membre) < 4 && GRADES[c.grade] >= niv(req.membre)) return bad(res, 403, 'Tu ne peux pas suspendre un membre de ton rang ou supérieur.');
+  await pool.query('UPDATE dojo_membres SET statut=$1 WHERE id=$2', [susp ? 'suspendu' : 'actif', id]);
+  await log(req, (susp ? 'Membre suspendu : ' : 'Membre réactivé : ') + c.nom_rp); res.json({ ok: true });
+}));
+app.get('/api/notifs', membreReel, h(async (req, res) => res.json((await pool.query('SELECT id, texte, lue, cree_le FROM dojo_notifs WHERE membre_id=$1 ORDER BY cree_le DESC LIMIT 40', [req.membre.id])).rows)));
+app.post('/api/notifs/lues', membreReel, h(async (req, res) => { await pool.query('UPDATE dojo_notifs SET lue=TRUE WHERE membre_id=$1', [req.membre.id]); res.json({ ok: true }); }));
+app.get('/api/recherche', h(async (req, res) => {
+  const q = txt(req.query.q, 60); if (q.length < 2) return res.json({ membres: [], techniques: [], annonces: [] });
+  const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%', pass = niv(req.membre) >= 2, maxB = Math.max(req.membre.barriere, 1);
+  const mem = (await pool.query("SELECT id, nom_rp, grade, barriere FROM dojo_membres WHERE statut='actif' AND nom_rp ILIKE $1 ESCAPE '\\' ORDER BY nom_rp LIMIT 10", [like])).rows;
+  const tec = (await pool.query("SELECT id, nom, barriere_requise, danger, description FROM dojo_techniques WHERE nom ILIKE $1 ESCAPE '\\' OR description ILIKE $1 ESCAPE '\\' ORDER BY nom LIMIT 10", [like])).rows
+    .map((t) => (pass || t.barriere_requise <= maxB ? t : { id: t.id, nom: t.nom, barriere_requise: t.barriere_requise, verrouille: true }));
+  const ann = (await pool.query("SELECT id, titre, LEFT(contenu, 200) AS extrait FROM dojo_annonces WHERE titre ILIKE $1 ESCAPE '\\' OR contenu ILIKE $1 ESCAPE '\\' ORDER BY cree_le DESC LIMIT 10", [like])).rows;
+  res.json({ membres: mem, techniques: tec, annonces: ann });
+}));
+app.get('/api/export/membres.csv', need(3), h(async (req, res) => {
+  const rows = (await pool.query(`SELECT m.nom_rp, m.username, m.grade, m.barriere, m.cree_le,
+    (SELECT COUNT(*)::int FROM dojo_inscriptions i WHERE i.membre_id=m.id AND i.present IS TRUE) AS presences,
+    (SELECT COUNT(*)::int FROM dojo_inscriptions i WHERE i.membre_id=m.id AND i.present IS NOT NULL) AS appels
+    FROM dojo_membres m WHERE m.statut='actif' ORDER BY m.nom_rp`)).rows;
+  const cell = (v) => { let c = String(v ?? ''); if (/^[=+\-@\t\r]/.test(c)) c = "'" + c; return '"' + c.replace(/"/g, '""') + '"'; }; // anti-injection de formules tableur
+  const csv = ['Nom RP;Identifiant;Grade;Barrière;Présences;Appels;Inscrit le', ...rows.map((r) => [r.nom_rp, r.username, LABEL[r.grade], BNOM[r.barriere] || 'Aucune', r.presences, r.appels, new Date(r.cree_le).toISOString().slice(0, 10)].map(cell).join(';'))].join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename="membres-dojo.csv"');
+  res.send('\ufeff' + csv);
+}));
 app.post('/api/membres/:id/decision', need(3), h(async (req, res) => {
   const b = req.body || {}, d = b.decision;
   if (!['actif', 'refuse'].includes(d)) return bad(res, 400, 'Décision invalide.');
@@ -152,27 +227,30 @@ app.post('/api/membres/:id/decision', need(3), h(async (req, res) => {
     barriere=CASE WHEN $1::text='actif' THEN $4::int ELSE barriere END, valide_par=$5, valide_le=now()
     WHERE id=$2 AND statut='en_attente' RETURNING nom_rp`, [d, Number(req.params.id), grade, barriere, req.membre.id]);
   if (!r.rowCount) return bad(res, 404, 'Demande introuvable.');
+  if (d === 'actif') await progres(Number(req.params.id), barriere, req.membre.id, 'admission');
   await log(req, (d === 'actif' ? `Inscription acceptée : ${r.rows[0].nom_rp} (${grade}, barrière ${barriere})` : 'Inscription refusée : ' + r.rows[0].nom_rp)); res.json({ ok: true });
 }));
 app.put('/api/membres/:id', need(3), h(async (req, res) => {
-  const cible = (await pool.query("SELECT id, grade, nom_rp FROM dojo_membres WHERE id=$1 AND statut='actif'", [Number(req.params.id)])).rows[0];
+  const cible = (await pool.query("SELECT id, grade, barriere, nom_rp FROM dojo_membres WHERE id=$1 AND statut='actif'", [Number(req.params.id)])).rows[0];
   if (!cible) return bad(res, 404, 'Membre introuvable.');
   const moi = niv(req.membre), lc = GRADES[cible.grade], b = req.body || {};
   if (moi < 4 && lc >= moi) return bad(res, 403, 'Tu ne peux pas modifier un membre de ton rang ou supérieur.');
   if (b.grade !== undefined) {
     if (!GRADES[b.grade] || (moi < 4 && GRADES[b.grade] > 2)) return bad(res, 403, 'Un Co-Maître ne peut nommer que jusqu\'au rang de Professeur.');
     await pool.query('UPDATE dojo_membres SET grade=$1 WHERE id=$2', [b.grade, cible.id]);
+    if (b.grade !== cible.grade) await notifier(cible.id, `Ton grade est maintenant : ${LABEL[b.grade]}.`);
   }
   if (b.barriere !== undefined) {
     const n = Number(b.barriere); if (!(n >= 0 && n <= 4)) return bad(res, 400, 'Barrière invalide.');
     await pool.query('UPDATE dojo_membres SET barriere=$1 WHERE id=$2', [n, cible.id]);
+    if (n !== cible.barriere) { await progres(cible.id, n, req.membre.id, 'manuel'); await notifier(cible.id, n ? `Ta plus haute barrière maîtrisée est maintenant : ${BNOM[n]}.` : 'Ta progression de barrière a été réinitialisée.'); }
   }
   await log(req, `Modification de ${cible.nom_rp} (grade: ${b.grade ?? '—'}, barrière: ${b.barriere ?? '—'})`); res.json({ ok: true });
 }));
 app.delete('/api/membres/:id', need(4), h(async (req, res) => {
   if (Number(req.params.id) === req.membre.id) return bad(res, 400, 'Tu ne peux pas te supprimer toi-même.');
   const r = await pool.query('DELETE FROM dojo_membres WHERE id=$1 RETURNING nom_rp', [Number(req.params.id)]);
-  if (r.rowCount) { await pool.query('DELETE FROM dojo_inscriptions WHERE membre_id=$1', [Number(req.params.id)]); await log(req, 'Membre supprimé : ' + r.rows[0].nom_rp); }
+  if (r.rowCount) { for (const t of ['dojo_inscriptions', 'dojo_notifs', 'dojo_progres', 'dojo_evaluations', 'dojo_carnet']) await pool.query(`DELETE FROM ${t} WHERE membre_id=$1`, [Number(req.params.id)]); await log(req, 'Membre supprimé : ' + r.rows[0].nom_rp); }
   res.json({ ok: true });
 }));
 
@@ -197,7 +275,11 @@ app.post('/api/examens/:id/decision', need(2), h(async (req, res) => {
   if (e.membre_id === req.membre.id) return bad(res, 403, 'Tu ne peux pas juger ta propre demande.');
   if (e.barriere_visee === 4 && niv(req.membre) < 3) return bad(res, 403, 'La Barrière Rouge est validée par un Co-Maître ou le Maître.');
   await pool.query('UPDATE dojo_examens SET statut=$1, commentaire=$2, juge_id=$3, traite_le=now() WHERE id=$4', [b.decision, txt(b.commentaire, 500), req.membre.id, e.id]);
-  if (b.decision === 'accepte') await pool.query('UPDATE dojo_membres SET barriere=$1 WHERE id=$2 AND barriere=$3', [e.barriere_visee, e.membre_id, e.barriere_visee - 1]);
+  if (b.decision === 'accepte') {
+    const u = await pool.query('UPDATE dojo_membres SET barriere=$1 WHERE id=$2 AND barriere=$3', [e.barriere_visee, e.membre_id, e.barriere_visee - 1]);
+    if (u.rowCount) await progres(e.membre_id, e.barriere_visee, req.membre.id, 'examen');
+  }
+  await notifier(e.membre_id, `Ton épreuve de la Barrière ${BNOM[e.barriere_visee]} a été ${b.decision === 'accepte' ? 'validée 🎉' : 'refusée'}.${b.commentaire ? ' Commentaire : ' + txt(b.commentaire, 200) : ''}`);
   await log(req, `Examen #${e.id} ${b.decision}`); res.json({ ok: true });
 }));
 
@@ -212,9 +294,12 @@ app.get('/api/seances', h(async (req, res) => {
 app.post('/api/seances', need(2), h(async (req, res) => {
   const b = req.body || {}, d = new Date(b.date_heure), t = txt(b.titre, 100);
   if (!t || isNaN(d)) return bad(res, 400, 'Titre et date valides requis.');
-  await pool.query('INSERT INTO dojo_seances (titre, description, date_heure, lieu, barriere_min, capacite, prof_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-    [t, txt(b.description, 1000), d, txt(b.lieu, 100), Math.min(4, Math.max(0, Number(b.barriere_min) || 0)), Math.max(0, Number(b.capacite) || 0), req.membre.id]);
-  await log(req, 'Séance créée : ' + t); res.json({ ok: true });
+  const rep = Math.min(12, Math.max(1, Math.floor(Number(b.repetitions)) || 1)); // répétition hebdomadaire
+  for (let i = 0; i < rep; i++) {
+    await pool.query('INSERT INTO dojo_seances (titre, description, date_heure, lieu, barriere_min, capacite, prof_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [t, txt(b.description, 1000), new Date(d.getTime() + i * 7 * 24 * 3600 * 1000), txt(b.lieu, 100), Math.min(4, Math.max(0, Number(b.barriere_min) || 0)), Math.max(0, Number(b.capacite) || 0), req.membre.id]);
+  }
+  await log(req, 'Séance créée : ' + t + (rep > 1 ? ` (x${rep})` : '')); res.json({ ok: true });
 }));
 app.delete('/api/seances/:id', need(2), h(async (req, res) => {
   const s = (await pool.query('SELECT prof_id FROM dojo_seances WHERE id=$1', [Number(req.params.id)])).rows[0];
@@ -247,7 +332,9 @@ app.post('/api/seances/:id/appel', need(2), h(async (req, res) => {
 app.get('/api/annonces', h(async (req, res) => res.json((await pool.query('SELECT a.*, COALESCE(m.nom_rp,\'Administrateur\') AS auteur FROM dojo_annonces a LEFT JOIN dojo_membres m ON m.id=a.auteur_id ORDER BY a.epinglee DESC, a.cree_le DESC LIMIT 50')).rows)));
 app.post('/api/annonces', need(2), h(async (req, res) => {
   const b = req.body || {}, t = txt(b.titre, 120); if (!t) return bad(res, 400, 'Titre requis.');
-  await pool.query('INSERT INTO dojo_annonces (titre, contenu, auteur_id, epinglee) VALUES ($1,$2,$3,$4)', [t, txt(b.contenu, 3000), req.membre.id, niv(req.membre) >= 3 && !!b.epinglee]); res.json({ ok: true });
+  await pool.query('INSERT INTO dojo_annonces (titre, contenu, auteur_id, epinglee) VALUES ($1,$2,$3,$4)', [t, txt(b.contenu, 3000), req.membre.id, niv(req.membre) >= 3 && !!b.epinglee]);
+  await pool.query("INSERT INTO dojo_notifs (membre_id, texte) SELECT id, $1 FROM dojo_membres WHERE statut='actif' AND id <> $2", ['📢 Nouvelle annonce : ' + t, req.membre.id]).catch(() => {});
+  res.json({ ok: true });
 }));
 app.delete('/api/annonces/:id', need(2), h(async (req, res) => {
   const a = (await pool.query('SELECT auteur_id FROM dojo_annonces WHERE id=$1', [Number(req.params.id)])).rows[0];
@@ -296,6 +383,9 @@ async function init() {
     CREATE TABLE IF NOT EXISTS dojo_carnet (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, texte TEXT NOT NULL, barriere INT DEFAULT 0, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_activite (id SERIAL PRIMARY KEY, membre_id INT, nom TEXT, action TEXT NOT NULL, cree_le TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS dojo_reglement (id INT PRIMARY KEY, contenu TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS dojo_notifs (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, texte TEXT NOT NULL, lue BOOLEAN NOT NULL DEFAULT FALSE, cree_le TIMESTAMPTZ DEFAULT now());
+    CREATE TABLE IF NOT EXISTS dojo_progres (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, barriere INT NOT NULL, date TIMESTAMPTZ DEFAULT now(), valide_par INT, source TEXT);
+    CREATE TABLE IF NOT EXISTS dojo_evaluations (id SERIAL PRIMARY KEY, membre_id INT NOT NULL, auteur_id INT, auteur_nom TEXT, texte TEXT NOT NULL, note INT, cree_le TIMESTAMPTZ DEFAULT now());
     ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS valide_par INT;
     ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS valide_le TIMESTAMPTZ;
     ALTER TABLE dojo_membres ADD COLUMN IF NOT EXISTS derniere_connexion TIMESTAMPTZ;`);
