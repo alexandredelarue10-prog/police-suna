@@ -6,6 +6,10 @@ const BN = ['Aucune barrière maîtrisée', 'Verte', 'Bleue', 'Violette', 'Rouge
 const BC = ['#8a8070', '#4f9d4f', '#3f7fd0', '#8a52c8', '#c23b3b'];
 const DG = { faible: 'Faible', modere: 'Modéré', eleve: 'Élevé', interdit: 'Interdit' };
 const pill = (n) => `<span class="pill" style="--c:${BC[n]}">${n ? 'Barrière ' + BN[n] : BN[0]}</span>`;
+const NIVT = ['', 'Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
+const NC = ['', '#7fb069', '#e0b84c', '#e08a3c', '#d4503c'];
+const npill = (n) => `<span class="pill" style="--c:${NC[n]}">${NIVT[n]}</span>`;
+const nivOpts = (sel) => opts([1, 2, 3, 4].map((i) => [i, NIVT[i]]), sel);
 const fmt = (d) => new Date(d).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
 const opts = (list, sel) => list.map(([v, l]) => `<option value="${v}" ${String(v) === String(sel) ? 'selected' : ''}>${esc(l)}</option>`).join('');
 const barOpts = (sel, from = 0) => opts(BN.map((n, i) => [i, i ? 'Barrière ' + n : n]).slice(from), sel);
@@ -43,10 +47,10 @@ const VUES = {
   },
   async grimoire(f) {
     const t = await api('techniques'); const fl = Number(f.b || 0);
-    return `<h1>Grimoire des sceaux</h1><div class="row" style="margin-bottom:14px"><select id="fb" data-act="filtreGrimoire"><option value="0">Toutes les barrières</option>${barOpts(fl, 1)}</select>${staff() ? '<button class="btn" data-act="formTech">+ Nouvelle technique</button>' : ''}</div>
+    return `<h1>Grimoire des sceaux</h1><p class="mut">Les niveaux s'ouvrent au fil de ta progression dans les barrières.</p><div class="row" style="margin-bottom:14px"><select id="fb" data-act="filtreGrimoire"><option value="0">Tous les niveaux</option>${nivOpts(fl)}</select>${staff() ? '<button class="btn" data-act="formTech">+ Nouvelle technique</button>' : ''}</div>
     <div class="grid">${t.filter((x) => !fl || x.barriere_requise === fl).map((x) => x.verrouille
-      ? `<div class="card locked"><b>🔒 ${esc(x.nom)}</b><div style="margin-top:6px">${pill(x.barriere_requise)}</div><p class="mut">Atteins la Barrière ${BN[x.barriere_requise]} pour accéder à cette technique.</p></div>`
-      : `<div class="card"><b>${esc(x.nom)}</b><div class="row" style="margin:6px 0">${pill(x.barriere_requise)}<span class="mut">Danger : ${DG[x.danger]}</span></div><pre>${esc(x.description)}</pre>
+      ? `<div class="card locked"><b>🔒 ${esc(x.nom)}</b><div style="margin-top:6px">${npill(x.barriere_requise)}</div><p class="mut">Niveau ${NIVT[x.barriere_requise].toLowerCase()} : progresse dans les barrières pour y accéder.</p></div>`
+      : `<div class="card"><b>${esc(x.nom)}</b><div class="row" style="margin:6px 0">${npill(x.barriere_requise)}<span class="mut">Danger : ${DG[x.danger]}</span></div><pre>${esc(x.description)}</pre>
         ${x.composantes ? `<p class="mut"><b>Composantes :</b> ${esc(x.composantes)}</p>` : ''}<div class="mut">Par ${esc(x.auteur)}</div>
         ${staff() ? `<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="formTech" data-id="${x.id}">Modifier</button>${co() ? `<button class="btn sm red" data-act="delTech" data-id="${x.id}">Supprimer</button>` : ''}</div>` : ''}</div>`).join('') || '<p class="mut">Aucune technique.</p>'}</div>`;
   },
@@ -127,7 +131,7 @@ VUES.recherche = async (f) => {
   if (q.length < 2) return '<h1>Recherche</h1><p class="mut">Tape au moins 2 caractères dans la barre du haut.</p>';
   const r = await api('recherche?q=' + encodeURIComponent(q));
   return `<h1>Résultats pour « ${esc(q)} »</h1><h2>Membres</h2>${r.membres.map((m) => `<div class="card row"><b>${esc(m.nom_rp)}</b><span class="pill" style="--c:#cba84c">${GR[m.grade]}</span>${pill(m.barriere)}<span style="flex:1"></span><button class="btn sm ghost" data-act="profilMembre" data-id="${m.id}">Profil</button></div>`).join('') || '<p class="mut">Aucun.</p>'}
-  <h2>Techniques</h2>${r.techniques.map((t) => `<div class="card ${t.verrouille ? 'locked' : ''}"><b>${t.verrouille ? '🔒 ' : ''}${esc(t.nom)}</b> ${pill(t.barriere_requise)}${t.verrouille ? '' : `<pre class="mut">${esc((t.description || '').slice(0, 200))}</pre>`}</div>`).join('') || '<p class="mut">Aucune.</p>'}
+  <h2>Techniques</h2>${r.techniques.map((t) => `<div class="card ${t.verrouille ? 'locked' : ''}"><b>${t.verrouille ? '🔒 ' : ''}${esc(t.nom)}</b> ${npill(t.barriere_requise)}${t.verrouille ? '' : `<pre class="mut">${esc((t.description || '').slice(0, 200))}</pre>`}</div>`).join('') || '<p class="mut">Aucune.</p>'}
   <h2>Annonces</h2>${r.annonces.map((a) => `<div class="card"><b>${esc(a.titre)}</b><pre class="mut">${esc(a.extrait)}</pre></div>`).join('') || '<p class="mut">Aucune.</p>'}`;
 };
 const NAV = [['accueil', 'Accueil'], ['barrieres', 'Barrières'], ['grimoire', 'Grimoire'], ['seances', 'Séances'], ['examens', 'Examens'], ['membres', 'Membres'], ['annonces', 'Annonces'], ['carnet', 'Carnet'], ['stats', 'Stats'], ['reglement', 'Règlement']];
@@ -170,7 +174,7 @@ const ACTS = {
   async saveBarriere(el) { await api('barrieres/' + el.dataset.id, 'PUT', { nom: $('#bn').value, description: $('#bd').value, exigences: $('#be').value }); closeModal(); route(); },
   async formTech(el) {
     const t = el.dataset.id ? (await api('techniques')).find((x) => x.id == el.dataset.id) : { nom: '', barriere_requise: 1, danger: 'faible', description: '', composantes: '' };
-    modal(`<h3>${el.dataset.id ? 'Modifier' : 'Nouvelle'} technique</h3><input id="tn" maxlength="80" placeholder="Nom" value="${esc(t.nom)}"><div class="row"><select id="tb">${barOpts(t.barriere_requise, 1)}</select><select id="td">${opts(Object.entries(DG), t.danger)}</select></div>
+    modal(`<h3>${el.dataset.id ? 'Modifier' : 'Nouvelle'} technique</h3><input id="tn" maxlength="80" placeholder="Nom" value="${esc(t.nom)}"><div class="row"><div><label>Niveau</label><select id="tb">${nivOpts(t.barriere_requise)}</select></div><div><label>Danger</label><select id="td">${opts(Object.entries(DG), t.danger)}</select></div></div>
       <textarea id="tx" placeholder="Description">${esc(t.description)}</textarea><input id="tc" placeholder="Composantes (encre, chakra…)" value="${esc(t.composantes)}"><button class="btn" data-act="saveTech" data-id="${el.dataset.id || ''}">Enregistrer</button>`);
   },
   async saveTech(el) { const b = { nom: $('#tn').value, barriere_requise: $('#tb').value, danger: $('#td').value, description: $('#tx').value, composantes: $('#tc').value }; el.dataset.id ? await api('techniques/' + el.dataset.id, 'PUT', b) : await api('techniques', 'POST', b); closeModal(); route(); },

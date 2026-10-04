@@ -122,12 +122,12 @@ const techOk = (b) => {
   return t.nom && t.barriere >= 1 && t.barriere <= 4 && DANGERS.includes(t.danger) ? t : null;
 };
 app.post('/api/techniques', need(2), h(async (req, res) => {
-  const t = techOk(req.body || {}); if (!t) return bad(res, 400, 'Nom, barrière (1-4) et danger requis.');
+  const t = techOk(req.body || {}); if (!t) return bad(res, 400, 'Nom, niveau (1-4) et danger requis.');
   await pool.query('INSERT INTO dojo_techniques (nom, barriere_requise, danger, description, composantes, auteur_id) VALUES ($1,$2,$3,$4,$5,$6)', [t.nom, t.barriere, t.danger, t.description, t.composantes, req.membre.id]);
   await log(req, 'Nouvelle technique : ' + t.nom); res.json({ ok: true });
 }));
 app.put('/api/techniques/:id', need(2), h(async (req, res) => {
-  const t = techOk(req.body || {}); if (!t) return bad(res, 400, 'Nom, barrière (1-4) et danger requis.');
+  const t = techOk(req.body || {}); if (!t) return bad(res, 400, 'Nom, niveau (1-4) et danger requis.');
   await pool.query('UPDATE dojo_techniques SET nom=$1, barriere_requise=$2, danger=$3, description=$4, composantes=$5 WHERE id=$6', [t.nom, t.barriere, t.danger, t.description, t.composantes, Number(req.params.id)]);
   res.json({ ok: true });
 }));
