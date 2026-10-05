@@ -7,6 +7,7 @@ const path = require('path');
 const pool = require('./apps/police-suna/src/config/db');
 const police = require('./apps/police-suna');
 const dojo = require('./apps/dojo-fuinjutsu');
+const senso = require('./apps/dojo-sensoriel');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,7 +17,7 @@ app.set('trust proxy', 1);
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ---------- Réglages admin (en mémoire, persistés en base) ----------
-const SITES = ['police-suna', 'dojo-fuinjutsu']; // sites hébergés ici, verrouillables séparément
+const SITES = ['police-suna', 'dojo-fuinjutsu', 'dojo-sensoriel']; // sites hébergés ici, verrouillables séparément
 const reglages = { locks: {}, annonce: { actif: false, texte: '' } };
 async function chargerReglages() {
   await pool.query('CREATE TABLE IF NOT EXISTS hub_settings (cle TEXT PRIMARY KEY, valeur JSONB NOT NULL)');
@@ -76,6 +77,10 @@ app.use('/police-suna', police.app);
 // Dojo de fuinjutsu : l'admin du hub y agit comme Maître
 app.get(/^\/dojo-fuinjutsu$/, (req, res) => res.redirect('/dojo-fuinjutsu/'));
 app.use('/dojo-fuinjutsu', verrou('dojo-fuinjutsu'), (req, res, next) => { req.hubAdmin = isHub(req); next(); }, dojo.app);
+
+// Dojo des ninja sensoriels (détection de chakra)
+app.get(/^\/dojo-sensoriel$/, (req, res) => res.redirect('/dojo-sensoriel/'));
+app.use('/dojo-sensoriel', verrou('dojo-sensoriel'), (req, res, next) => { req.hubAdmin = isHub(req); next(); }, senso.app);
 
 // ---------- Hub ----------
 app.use((req, res, next) => {
@@ -160,5 +165,6 @@ app.use((req, res) => res.redirect('/'));
 police.init()
   .then(chargerReglages)
   .then(dojo.init)
+  .then(senso.init)
   .then(() => app.listen(PORT, () => console.log(`[server] Hub + police-suna en ligne sur le port ${PORT}`)))
   .catch((err) => { console.error('[server] Échec du démarrage :', err); process.exit(1); });

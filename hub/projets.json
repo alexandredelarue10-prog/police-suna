@@ -25,5 +25,18 @@
     "statut": "En ligne",
     "url": "/dojo-fuinjutsu/",
     "public": true
+  },
+  {
+    "id": "dojo-sensoriel",
+    "nom": "Dojo des Sensoriels",
+    "description": "Site RP du dojo des ninja sensoriels : détection de chakra, quatre sphères de perception, grimoire, examens, séances avec appel, salle d'entraînement à la détection et classement.",
+    "tags": [
+      "Node.js",
+      "Express",
+      "PostgreSQL"
+    ],
+    "statut": "En ligne",
+    "url": "/dojo-sensoriel/",
+    "public": true
   }
 ]
