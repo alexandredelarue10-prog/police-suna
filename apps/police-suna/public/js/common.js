@@ -287,20 +287,5 @@ async function initLayout({ activeKey = '', requireAuth = false, requirePerm = n
   buildNavbar(activeKey);
   buildFooter();
   initLiveSync();
-  initAnnonce();
   return CURRENT_USER;
-}
-
-
-// Bandeau d'annonce géré depuis l'admin du hub (racine du site : /hub/annonce)
-async function initAnnonce() {
-  try {
-    const r = await fetch('/hub/annonce');
-    const a = await r.json();
-    if (!a.texte) return;
-    const b = document.createElement('div');
-    b.textContent = a.texte;
-    b.style.cssText = 'background:#CBA84C;color:#17150F;text-align:center;padding:10px 16px;font-weight:600;position:relative;z-index:1000';
-    document.body.insertBefore(b, document.body.firstChild);
-  } catch (_) { /* annonce facultative : ne jamais casser la page */ }
 }
